@@ -4,8 +4,8 @@ import os
 from datetime import datetime, timedelta
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from scripts.tools.chainkit import get_blocks_by_date_range
-from scripts.tools.database import save_table, get_table,update_table
+from tools.chainkit import get_blocks_by_date_range
+from tools.database import save_table, get_table,update_table
 from datetime import datetime
 from dotenv import load_dotenv  
 import logging
