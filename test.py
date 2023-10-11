@@ -1,3 +1,7 @@
-from blocks_daily_update import run
+import traceback
+from defillama_prices_create import run
 
-run()
+try:
+    run()
+except Exception as e:
+    print(traceback.format_exc())

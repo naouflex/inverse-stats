@@ -1,6 +1,7 @@
 import pandas as pd
 import traceback
-from sqlalchemy import create_engine, text,MetaData, Table, Column, String, Integer,select,exc as sqla_exc
+from sqlalchemy import MetaData, Column, Integer, String, Float, DateTime, Table, select, create_engine, update
+import sqlalchemy.exc as sqla_exc
 import io
 
 
@@ -8,16 +9,32 @@ import io
 def table_exists(engine, table_name):
     return engine.dialect.has_table(engine.connect(), table_name)
 
-def create_table_from_df(engine, table_name,df):
+def map_dtype(dtype):
+    mapping = {
+        'O': String,
+        'int64': Integer,
+        'float64': Float,
+        'datetime64[ns]': DateTime,
+        'Int64': Integer,
+    }
+    return mapping.get(str(dtype), String)
+
+def create_table_from_df(engine, table_name, df):
     try:
         meta = MetaData()
-        columns = [Column(col, String) if df[col].dtype == 'O' else Column(col, Integer) for col in df.columns]
+        
+        columns = [Column(col, map_dtype(df[col].dtype)) for col in df.columns]
+        
         table = Table(table_name, meta, *columns)
+        
         table.create(engine)
+        
         print(f"Successfully created table {table_name}")
+        
     except sqla_exc.SQLAlchemyError as e:
         print(f"SQLAlchemy error occurred: {e}")
         print(traceback.format_exc())
+        
     except Exception as e:
         print(f"An error occurred: {e}")
         print(traceback.format_exc())
