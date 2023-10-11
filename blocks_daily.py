@@ -50,6 +50,7 @@ def update_block_table(db_url,table_name,end_date=None):
     try:
         # get block table to get the last date in the db
         block_table = get_table(db_url,table_name)
+        
         last_date = block_table['date'].max()
 
         # convert unix timestamp to datetime

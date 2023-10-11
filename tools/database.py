@@ -1,7 +1,8 @@
 import pandas as pd
 import traceback
-from sqlalchemy import create_engine, text, MetaData, Table, Column, String, Integer, exc as sqla_exc
+from sqlalchemy import create_engine, text,MetaData, Table, Column, String, Integer,select,exc as sqla_exc
 import io
+
 
 
 def table_exists(engine, table_name):
@@ -11,7 +12,6 @@ def create_table_from_df(engine, table_name,df):
     try:
         meta = MetaData()
         columns = [Column(col, String) if df[col].dtype == 'O' else Column(col, Integer) for col in df.columns]
-        
         table = Table(table_name, meta, *columns)
         table.create(engine)
         print(f"Successfully created table {table_name}")
@@ -22,20 +22,19 @@ def create_table_from_df(engine, table_name,df):
         print(f"An error occurred: {e}")
         print(traceback.format_exc())
 
-def save_table(db_url,table_name,df):
+def save_table(db_url, table_name, df):
     engine = create_engine(db_url)
-    #make sure df is a dataframe
-    df = pd.DataFrame(df)
+    df = pd.DataFrame(df)  # make sure df is a dataframe
 
     try:
         if not table_exists(engine, table_name):
-            create_table_from_df(engine, table_name,df)
+            create_table_from_df(engine, table_name, df)
 
         buffer = io.StringIO()
         df.to_csv(buffer, index=False, header=False)
         buffer.seek(0)
-
         raw_conn = engine.raw_connection()
+
         try:
             with raw_conn.cursor() as cur:
                 cur.copy_from(buffer, table_name, sep=',', null='')
@@ -52,23 +51,22 @@ def save_table(db_url,table_name,df):
         print(f"An error occurred: {e}")
         print(traceback.format_exc())
 
-def get_table(db_url,table_name):
+
+def get_table(db_url, table_name):
     engine = create_engine(db_url)
-    try:
-        if not table_exists(engine, table_name):
-            print(f"Table {table_name} does not exist")
-            return None
-        else:
-            df = pd.read_sql_table(table_name,engine)
-            return df
-    except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
+
+    if not table_exists(engine, table_name):
+        print(f"Table {table_name} does not exist")
         return None
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
-        return None
+    else:
+        meta = MetaData()
+        table = Table(table_name, meta, autoload_with=engine)
+        stmt = select(table.c)  # Fix is here
+        with engine.connect() as conn:
+            results = conn.execute(stmt).fetchall()
+        df = pd.DataFrame(results, columns=table.columns.keys())
+        print(f"Successfully read {len(df)} rows from {table_name}")
+        return df
 
 def update_table(db_url, table_name,df):
     engine = create_engine(db_url)
@@ -89,8 +87,8 @@ def update_table(db_url, table_name,df):
                 buffer = io.StringIO()
                 df.to_csv(buffer, index=False, header=False)
                 buffer.seek(0)
-
                 raw_conn = engine.raw_connection()
+
                 try:
                     with raw_conn.cursor() as cur:
                         cur.copy_from(buffer, table_name, sep=',', null='')
