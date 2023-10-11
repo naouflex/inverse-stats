@@ -8,6 +8,7 @@ from decimal import Decimal
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from tools.database import save_table, get_table,update_table
+from tools.chainkit import get_custom_state
 from dotenv import load_dotenv
 import logging
 
@@ -42,15 +43,6 @@ def build_methodology_table():
         traceback.print_exc()
         return None
 
-def get_rpc_table():
-    try:
-        web3_providers = requests.get("").json()
-        web3_providers = pd.DataFrame(web3_providers['query_result']['data']['rows']) 
-        return web3_providers
-    except Exception as e:
-        logger.error(f"Cannot get rpc table: {e}")
-        return
-
 def process_row(row, blocks_row,result_state):
     try:
         #blocks_row is a pd series
@@ -62,9 +54,32 @@ def process_row(row, blocks_row,result_state):
         contract = w3.eth.contract(address=Web3.toChecksumAddress(row['abi_address']), abi=(row['abi']))
         
         for block in blocks_row[blocks_row > row['start_block']]:
-            print(f"Processing block {block} for {row['chain_name_y']}")
-            formula_asset = row['formula_asset']
-            formula_liability = row['formula_liability']
+            #print(f"Processing block {block} for {row['chain_name_y']}")
+            print(f"Formula Asset: {row['formula_asset']},value: {get_custom_state(w3, row['abi'], row['formula_asset'], block)}")
+            print(f"Formula Asset: {row['formula_liability']},value: {get_custom_state(w3, row['abi'], row['formula_liability'], block)}")
+            
+            # if there is a formula for liability, first we check if there is a + in the formula
+            # if there is a + in the formula, then we need to split the formula into two parts and get the value before applying the formula
+            # if there is no + in the formula, then we just apply the formula
+            
+            #then we inswert the result into the result state
+            # id	chain_id	chain_name	type	abi_address	contract_address	protocol	account	Name	start_block	function	value_liability	value_asset
+            result_state.append({
+                'chain_id': row['chain_id'],
+                'chain_name': row['chain_name_y'],
+                'contract_address': row['contract_address'],
+                'protocol': row['protocol'],
+                'account': row['account'],
+                'name': row['name'],
+                'start_block': row['start_block'],
+                'value_liability': get_custom_state(w3, row['abi'], row['formula_liability'], block),
+                'value_asset': get_custom_state(w3, row['abi'], row['formula_asset'], block),
+                'block_number': block,
+                'block_timestamp': w3.eth.getBlock(block).timestamp,
+                'last_updated': datetime.now(),
+            })
+
+
             
     except Exception as e:
         print(traceback.format_exc())
@@ -81,11 +96,6 @@ try:
     for i in range(len(full_methodology)):
         row = full_methodology.iloc[i]
         blocks_row = blocks[row['chain_name_y']]
-        blocks_row.name = 'block_number'
-        blocks_row = blocks_row.dropna()
-        blocks_row = blocks_row[blocks_row != '']
-        blocks_row = blocks_row.astype(int)
-
         row_list.append((row, blocks_row, result_state))
 
     threads = []
@@ -95,7 +105,7 @@ try:
         t = threading.Thread(target=process_row, args=row_data)
         threads.append(t)
         t.start()
-        while threading.active_count() > 30:
+        while threading.active_count() > 1:
             pass
     
     for thread in threads:

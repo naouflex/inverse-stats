@@ -89,27 +89,22 @@ def get_blocks_by_date_range(w3,start_date, end_date):
 
 
 def get_call_result(w3,contract_address,method_name,abi,arguments,block_identifier='latest'):
-    w3.middleware_onion.inject(geth_poa_middleware, layer=0)
     contract = w3.eth.contract(address=contract_address, abi=abi)
     call = getattr(contract.functions, method_name)(*arguments)
     return call.call(block_identifier=block_identifier)
 
 
-def get_pool_tokens_balancer(w3,contract_address,arguments,index,sub_index):
-    w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-    contract = w3.eth.contract(address=contract_address, abi=abi)
-    call = getattr(contract.functions, 'getPoolTokens')(*arguments)
-    return call.call()[index][sub_index]
-
 def get_custom_state(w3,abi,string,block_identifier):
-    # string is a string object eg 0x2b34548b865ad66A2B046cb82e59eE43F75B90fd:globalSupply() or 0xba12222222228d8ba445958a75a0704d566bf2c8:getPoolTokens(0x8bc65eed474d1a00555825c91feab6a8255c2107000000000000000000000453)
-    # we first extract the contract address and the method name
-    # then we get the arguments from the string
-    # then we call the method
-    # then we return the result
+    #if stribng is none null empty or nan, return None
+    if string is None or pd.isnull(string) or string == '':
+        return None
     contract_address = string.split(':')[0]
     method_name = string.split(':')[1].split('(')[0]
     arguments = string.split(':')[1].split('(')[1][:-1].split(',')
+    # if string contains index and sub index, then we need to get the index and sub index
+    if '[' in string and ']' in string:
+        index = string.split('[')[1].split(']')[0].split('][')[0]
+        sub_index = string.split('[')[1].split(']')[0].split('][')[1]
 
     # if no arguments, then we call the method directly
     if len(arguments) == 1 and arguments[0] == '':
@@ -117,9 +112,13 @@ def get_custom_state(w3,abi,string,block_identifier):
     # if len is 42 then we have a single argument and convert it to a checksum address
     elif len(arguments) == 1 and len(arguments[0]) == 42:
         return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)
-    # if len is 66 then we have a single argument and convert it to a checksum address
+    # if len is 66 then we have a single argument and return usibng index and sub index
     elif len(arguments) == 1 and len(arguments[0]) == 66:
-        return get_call_result(w3,contract_address,method_name,abi,[Web3.toChecksumAddress(arguments[0])] ,block_identifier)
+        try:
+            return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)[int(index)][int(sub_index)]
+        except:
+            print(f"Error in getting custom state for {string}")
+            return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)
 
 
 
