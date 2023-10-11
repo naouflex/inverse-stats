@@ -8,6 +8,9 @@ from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from tools.database import save_table, get_table,update_table
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def get_methodology_dola_health():
     try:
@@ -54,7 +57,7 @@ def create_db_table_history():
 def update_db_table_history():
     return
 
-def process_contract(row, blocks,result_state):
+def process_row(row, blocks,result_state):
     try:
         contract_start_time = datetime.now()
 
@@ -64,11 +67,12 @@ def process_contract(row, blocks,result_state):
         contract = w3.eth.contract(address=Web3.toChecksumAddress(row['call_contract_address']), abi=(row['abi']))
 
         for block in blocks :
-            if block > row['start_block'] :
+            if int(block) < int(row['start_block']) :
                 continue
             try:
                 function = getattr(contract.functions, row['function'])
                 args = row['args']
+
                 if row['account'] == 'fed':
                         value = function().call(block_identifier=block)
                         contract_address = "0x865377367054516e17014ccded1e7d814edc9ce4"
@@ -92,7 +96,7 @@ def process_contract(row, blocks,result_state):
                             value = function(args).call(block_identifier=int(block))
                             contract_address=row['call_contract_address'] 
                             function=row['function']
-                            
+
                 result_state.append({'block_number': block,
                                     'block_timestamp': w3.eth.getBlock(block)['timestamp'],
                                     'contract_address': contract_address,
@@ -103,8 +107,7 @@ def process_contract(row, blocks,result_state):
             except Exception as e:
                 pass
 
-        contract_end_time = datetime.now()
-        print(f"contract {row['name']} - {row['call_contract_address']} - {row['start_block']} to {row['last_block_number']} -  execution time {contract_end_time - contract_start_time}")
+        print(f"contract {row['name']} - {row['call_contract_address']} - {row['start_block']} to {row['last_block_number']} -  execution time {datetime.now() - contract_start_time}")
 
     except Exception as e:
         print(e)
@@ -117,7 +120,7 @@ try:
     web3_providers = requests.get(os.getenv("WEB3_PROVIDERS")).json()
     smart_contracts = requests.get("https://app.inverse.watch/api/queries/454/results.json?api_key=CNsPQor5gykZdi7jS746PngKK5M8KGeZsGvOZZPf").json()
     
-    blocks = get_table(os.getenv('PROD_DB'),'daily_blocks')
+    blocks = get_table(os.getenv('PROD_DB'),'blocks_daily')
 
     methodology = pd.DataFrame(methodology['query_result']['data']['rows'])
     web3_providers = pd.DataFrame(web3_providers['query_result']['data']['rows']) 
@@ -134,20 +137,24 @@ try:
     full_methodology['call_contract_address'] = full_methodology['call_contract_address'].str.lower()
     smart_contracts['call_contract_address'] = smart_contracts['address'].str.lower()
     full_methodology = pd.merge(full_methodology, smart_contracts, on='call_contract_address', how='left')
-    
+    print(full_methodology)
     result_state = []
     row_list = []
+
     # TODO FIX logic
     for i in range(len(full_methodology)):
         row = full_methodology.iloc[i]
-        blocks_row = blocks[['date', row['chain_name']]]
+        # blocks are in the blocks dataframe in the column with a column name that correspond to the value in methodology['chain_name'] 
+        # so for example we want to get the blocks for the polygon chain we get the blocks from blocks['polygon'] if chain_name is polygon in methodology  
+        blocks_row = blocks[row['chain_name_y']]
+        print(blocks_row)
         row_list.append((row, blocks_row, result_state))
     
     threads = []
     
     # We want 10 threads at most concurrently running; when one stops, another one starts
     for row_data in row_list:
-        t = threading.Thread(target=process_contract, args=row_data)
+        t = threading.Thread(target=process_row, args=row_data)
         threads.append(t)
         t.start()
         while threading.active_count() > 30:
