@@ -39,13 +39,14 @@ def fetch_and_update_data(token_info, data):
         start_timestamp = int(datetime.utcfromtimestamp(start_timestamp).replace(hour=0, minute=0, second=0).timestamp())
         end_timestamp = int(datetime.utcnow().replace(hour=0, minute=0, second=0).timestamp())
         
-        # we add 1 to days_since_start because we want to include the end date
-        days_since_start = int(( datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days)+1
+        # We use days_since_start + 1 because we want to include both the start date and the end date
+        days_since_start = int(( datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days) + 2
+        
+        # Update token_info with the correct range
         token_info.update({'timestamp': start_timestamp, 'days': days_since_start})
 
         chart_data = fetch_chart_data(chain_slug, contract_address, start_timestamp, days_since_start)
         data['coins'].update(chart_data['coins'])
-        print(f"Fetched data for {chain_slug}:{contract_address}")
 
     except Exception as e:
         print(traceback.print_exc())
@@ -71,7 +72,6 @@ def fetch_and_save_current_data(token_info, data):
             }
             
             data['coins'][f"{chain_slug}:{contract_address}"] = coin_data
-            print(f"Fetched current data for {chain_slug}:{contract_address}")
 
     except Exception as e:
         print(traceback.print_exc())
@@ -136,8 +136,12 @@ def create_history():
         # Make sure all columns are in the proper format
         df = df.astype(valid_keys)
 
-        # Save data to database
+        if table_exists(db_url, table_name):
+            drop_table(db_url, table_name)
+        
         save_table(db_url, table_name, df)
+
+        remove_duplicates(db_url, table_name, ['timestamp', 'chain_id', 'token_address'], 'last_updated')
 
         logger.info(f"Total time: {datetime.now() - start_time}")
 
@@ -145,84 +149,6 @@ def create_history():
         logger.error(f"Error in creating historical price table : {traceback.print_exc()}")
         pass
 
-def update_history():
-    try:
-        start_time = datetime.now()
-        db_url = os.getenv('PROD_DB')
-        table_name = 'defillama_prices'
-
-        # Fetch the latest timestamp for each token from the database
-        latest_timestamps = get_table(db_url, table_name)
-        latest_timestamps = latest_timestamps.groupby('token_address')['timestamp'].max().to_dict()
- 
-        # Fetch token address list
-        url = "https://app.inverse.watch/api/queries/480/results.json?api_key=JY9REfUM3L7Ietj76qmQ2wFioz7k6GdCL6YqRxHG"
-        token_address_list = fetch_json(url)["query_result"]["data"]["rows"]
-
-        data = {"coins": {}}
-
-        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-            # for new tokens, we need to fetch the data from the beginning
-            # for existing tokens, we only need to fetch the data from the latest timestamp
-            for token_info in token_address_list:
-                chain_slug, contract_address = token_info['chain_slug'], token_info['contract_address']
-                if contract_address.lower() not in [x.lower() for x in latest_timestamps.keys()]:
-                    executor.submit(fetch_and_update_data, token_info, data)
-                else:
-                    token_info.update({'timestamp': latest_timestamps[contract_address]})
-                    executor.submit(fetch_and_update_data, token_info, data)
-
-        # Data manipulation using Pandas
-        df = pd.DataFrame(data)
-        df.reset_index(level=0, inplace=True)
-        df.rename(columns={"index": "chain:token_address"}, inplace=True)
-        df[['chain', 'token_address']] = df['chain:token_address'].str.split(':', expand=True)
-
-        df = pd.concat([df.drop(['coins', 'chain:token_address'], axis=1), df['coins'].apply(pd.Series)], axis=1)
-        df = df.explode('prices')
-        df = pd.concat([df.drop(['prices'], axis=1), df['prices'].apply(pd.Series)], axis=1)
-
-        # add chain_id column
-        chain_id_map = {'ethereum': 1, 'bsc': 56, 'polygon': 137, 'fantom': 250, 'optimism': 10, 'arbitrum': 42161, 'avax': 43114}
-        df['chain_id'] = df['chain'].map(chain_id_map)
-
-        # Convert timestamp column to datetime object
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-
-        # Round datetime to midnight
-        df['timestamp'] = df['timestamp'].dt.normalize()
-
-        # Convert datetime back to Unix timestamp
-        df['timestamp'] = df['timestamp'].astype(int) // 10 ** 9
-
-        df['last_updated'] = datetime.now()
-
-        # Filter out any keys not in DataFrame columns
-        valid_keys = {k: v for k, v in {
-            'timestamp': 'Int64', 
-            'chain': 'string', 
-            'chain_id': 'Int64', 
-            'token_address': 'string',
-            'price': 'float64',
-            'confidence': 'float64',
-            'symbol': 'string',
-            'decimals': 'Int64',
-            'last_updated': 'datetime64[ns]'
-        }.items() if k in df.columns}
-
-        # Make sure all columns are in the proper format
-        df = df.astype(valid_keys)
-        
-        update_table(db_url, table_name, df)
-
-        remove_duplicates(db_url, table_name, ['timestamp', 'token_address'], 'last_updated')
-
-        end_time = datetime.now()
-        logger.info(f"Total time: {end_time - start_time}")
-
-    except Exception as e:
-        logger.error(f"Error in updating price table: {traceback.print_exc()}")
- 
 def create_current():
     try:
         start_time = datetime.now()
@@ -251,8 +177,7 @@ def create_current():
         df = pd.concat([df.drop(['prices'], axis=1), df['prices'].apply(pd.Series)], axis=1)
         # rename 0 and 1 to timestamp and price
         df.rename(columns={0: 'timestamp', 1: 'price'}, inplace=True)
-        
-        print(df)
+
         # add chain_id column
         chain_id_map = {'ethereum': 1, 'bsc': 56, 'polygon': 137, 'fantom': 250, 'optimism': 10, 'arbitrum': 42161, 'avax': 43114}
         df['chain_id'] = df['chain'].map(chain_id_map)
@@ -279,64 +204,6 @@ def create_current():
         save_table(db_url, table_name, df)
         end_time = datetime.now()
         logger.info(f"Total time: {end_time - start_time}")
-        
-    except Exception as e:
-        logger.error(f"Error in creating current price table : {traceback.print_exc()}")
-        pass
-
-def update_current():
-    try:
-        start_time = datetime.now()
-        db_url = os.getenv('PROD_DB')
-        table_name = 'defillama_prices_current'
-
-        # Fetch token address list
-        url = "https://app.inverse.watch/api/queries/480/results.json?api_key=JY9REfUM3L7Ietj76qmQ2wFioz7k6GdCL6YqRxHG"
-        token_address_list = fetch_json(url)["query_result"]["data"]["rows"]
-
-        data = {"coins": {}}
-
-        # Fetch current prices for all tokens using the new API
-        fetch_and_save_current_data(token_address_list, data)
-
-        # Rest of the data processing is the same as before
-        df = pd.DataFrame(data)
-        
-        df.reset_index(level=0, inplace=True)
-        df.rename(columns={"index": "chain:token_address"}, inplace=True)
-        df[['chain', 'token_address']] = df['chain:token_address'].str.split(':', expand=True)
-        df = pd.concat([df.drop(['coins', 'chain:token_address'], axis=1), df['coins'].apply(pd.Series)], axis=1)
-        df = df.explode('prices')
-        df = pd.concat([df.drop(['prices'], axis=1), df['prices'].apply(pd.Series)], axis=1)
-        df.rename(columns={0: 'timestamp', 1: 'price'}, inplace=True)
-
-        # add chain_id column
-        chain_id_map = {'ethereum': 1, 'bsc': 56, 'polygon': 137, 'fantom': 250, 'optimism': 10, 'arbitrum': 42161, 'avax': 43114}
-        df['chain_id'] = df['chain'].map(chain_id_map)
-        df['last_updated'] = datetime.now()
-
-        # Filter out any keys not in DataFrame columns
-        valid_keys = {k: v for k, v in {
-            'timestamp': 'Int64', 
-            'chain': 'string', 
-            'chain_id': 'Int64', 
-            'token_address': 'string',
-            'price': 'float64',
-            'confidence': 'float64',
-            'symbol': 'string',
-            'decimals': 'Int64',
-            'last_updated': 'datetime64[ns]'
-        }.items() if k in df.columns}
-        
-        # Make sure all columns are in the proper format
-        df = df.astype(valid_keys)
-
-        # Save data to database if table exists, otherwise create table
-        if table_exists(db_url, table_name):
-            drop_table(db_url, table_name)
-        save_table(db_url, table_name, df)
-
-        logger.info(f"Total time: {datetime.now() - start_time}")
         
     except Exception as e:
         logger.error(f"Error in creating current price table : {traceback.print_exc()}")

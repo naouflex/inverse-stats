@@ -173,6 +173,7 @@ def remove_duplicates(db_url, table_name, duplicate_columns, order_column):
             
             df = df.sort_values(order_column)
             df = df.drop_duplicates(subset=duplicate_columns, keep='last')
+            
             # drop table
             table.drop(engine)
             # create table
