@@ -1,11 +1,10 @@
 import traceback
-from blocks_daily import create_current, update_current, update_history
+from defillama_prices import create_current, update_current, update_history,create_history
 
 try:
     #create_current()
-    update_current()
-    #create_current()
-    #update_history()
+    #update_current()
+    update_history()
 
 except Exception as e:
     print(traceback.format_exc())

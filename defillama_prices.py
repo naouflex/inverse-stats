@@ -20,7 +20,7 @@ def fetch_token_data(chain_slug, contract_address):
     url = f"https://coins.llama.fi/prices/first/{chain_slug}:{contract_address}"
     return fetch_json(url)
 
-def fetch_chart_data(chain_slug, contract_address, start_timestamp,end_timestamp, days):
+def fetch_chart_data(chain_slug, contract_address, start_timestamp, days):
     url = f"https://coins.llama.fi/chart/{chain_slug}:{contract_address}?start={start_timestamp}&span={days}&period=1d"
     return fetch_json(url)
 
@@ -30,19 +30,20 @@ def fetch_and_update_data(token_info, data):
 
         # Determine the start_timestamp based on the token_info or fetch from the API
         start_timestamp = token_info.get('timestamp')
+
         if not start_timestamp:
             token_data = fetch_token_data(chain_slug, contract_address)
             start_timestamp = int(token_data["coins"][f"{chain_slug}:{contract_address}"]['timestamp'])
 
         #set hour , minute and second to 0 and make sure this is utc
         start_timestamp = int(datetime.utcfromtimestamp(start_timestamp).replace(hour=0, minute=0, second=0).timestamp())
-        end_timestamp = int(datetime.utcnow().replace(hour=0, minute=0, second=0).timestamp())\
+        end_timestamp = int(datetime.utcnow().replace(hour=0, minute=0, second=0).timestamp())
         
         # we add 1 to days_since_start because we want to include the end date
-        days_since_start = int(( datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days)
+        days_since_start = int(( datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days)+1
         token_info.update({'timestamp': start_timestamp, 'days': days_since_start})
 
-        chart_data = fetch_chart_data(chain_slug, contract_address, start_timestamp, end_timestamp, days_since_start)
+        chart_data = fetch_chart_data(chain_slug, contract_address, start_timestamp, days_since_start)
         data['coins'].update(chart_data['coins'])
         print(f"Fetched data for {chain_slug}:{contract_address}")
 
@@ -153,8 +154,7 @@ def update_history():
         # Fetch the latest timestamp for each token from the database
         latest_timestamps = get_table(db_url, table_name)
         latest_timestamps = latest_timestamps.groupby('token_address')['timestamp'].max().to_dict()
-        print(latest_timestamps)
-
+ 
         # Fetch token address list
         url = "https://app.inverse.watch/api/queries/480/results.json?api_key=JY9REfUM3L7Ietj76qmQ2wFioz7k6GdCL6YqRxHG"
         token_address_list = fetch_json(url)["query_result"]["data"]["rows"]
@@ -214,6 +214,7 @@ def update_history():
         df = df.astype(valid_keys)
         
         update_table(db_url, table_name, df)
+
         remove_duplicates(db_url, table_name, ['timestamp', 'token_address'], 'last_updated')
 
         end_time = datetime.now()

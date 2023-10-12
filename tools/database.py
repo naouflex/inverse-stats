@@ -156,15 +156,16 @@ def update_table(db_url, table_name,df):
         print(f"An error occurred: {e}")
         print(traceback.format_exc())
 
-def remove_duplicates(db_url, table, duplicate_columns, order_column):
+def remove_duplicates(db_url, table_name, duplicate_columns, order_column):
     engine = create_engine(db_url)
+
     try:
-        if not table_exists(db_url, table):
+        if not table_exists(db_url, table_name):
             print(f"Table {table} does not exist")
             return None
         else:
             meta = MetaData()
-            table = Table(table, meta, autoload_with=engine)
+            table = Table(table_name, meta, autoload_with=engine)
             stmt = select(table.c)  # Fix is here
             with engine.connect() as conn:
                 results = conn.execute(stmt).fetchall()
@@ -175,9 +176,9 @@ def remove_duplicates(db_url, table, duplicate_columns, order_column):
             # drop table
             table.drop(engine)
             # create table
-            create_table_from_df(engine, table, df)
+            create_table_from_df(engine, table_name, df)
             # save table
-            save_table(db_url, table, df)
+            save_table(db_url, table_name, df)
 
     except sqla_exc.SQLAlchemyError as e:
         print(f"SQLAlchemy error occurred: {e}")
