@@ -1,3 +1,4 @@
+import traceback
 import requests
 import pandas as pd
 import os
@@ -5,7 +6,8 @@ from datetime import datetime, timedelta
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from tools.chainkit import get_blocks_by_date_range
-from tools.database import save_table, get_table,update_table
+from tools.database import save_table, get_table,update_table, table_exists, drop_table
+
 from datetime import datetime
 from dotenv import load_dotenv  
 import logging
@@ -50,9 +52,11 @@ def create_history():
             else:
                 chain_blocks = chain_blocks.rename(columns={'block_number': chain_name})
                 block_table = pd.merge(block_table, chain_blocks, on='date', how='left')
+
             logger.info(f"chain_id: {chain_id}, chain_name: {chain_name} processed")
+
         block_table = pd.DataFrame(block_table)
-        logger.info(block_table)
+        #logger.info(block_table)
         save_table(db_url,table_name,block_table)
         logger.info(f"Create Block Table - Time elapsed: {datetime.now() - start_time}")
         return
@@ -61,7 +65,6 @@ def create_history():
         return
 
 def update_history():
-
     try:
         start_time = datetime.now()
 
@@ -116,3 +119,70 @@ def update_history():
     except Exception as e:
         logger.error(f"Cannot update block table: {e}")
         return
+    
+def create_current():
+    #create the same table as create history but with the last_block_number only
+    # so there will be only one row per chain
+    try:
+        start_time = datetime.now()
+
+        db_url = os.getenv('PROD_DB')
+        table_name = 'blocks_current'
+
+        web3_providers = get_rpc_table()
+
+        for i in range(len(web3_providers)):
+            w3 = Web3(Web3.HTTPProvider(web3_providers['rpc_url'][i]))
+            w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+            chain_id = web3_providers['chain_id'][i]
+            chain_name = web3_providers['chain_name'][i]
+
+            chain_blocks = w3.eth.blockNumber
+            
+            if i==0:
+                block_table = pd.DataFrame({'chain_id': chain_id, 'chain_name': chain_name, 'block_number': chain_blocks}, index=[0])
+            else:
+                block_table = block_table.append({'chain_id': chain_id, 'chain_name': chain_name, 'block_number': chain_blocks}, ignore_index=True)
+            logger.info(f"chain_id: {chain_id}, chain_name: {chain_name} processed")
+        block_table = pd.DataFrame(block_table)
+        save_table(db_url,table_name,block_table)
+        logger.info(f"Create Current Block Table - Time elapsed: {datetime.now() - start_time}")
+
+    except Exception as e:
+        print(f"Cannot create block table: {e}")
+        return
+    
+def update_current():
+    try:
+        start_time = datetime.now()
+
+        db_url = os.getenv('PROD_DB')
+        table_name = 'blocks_current'
+
+        web3_providers = get_rpc_table()
+
+        for i in range(len(web3_providers)):
+            w3 = Web3(Web3.HTTPProvider(web3_providers['rpc_url'][i]))
+            w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+            chain_id = web3_providers['chain_id'][i]
+            chain_name = web3_providers['chain_name'][i]
+
+            chain_blocks = w3.eth.blockNumber
+            
+            if i==0:
+                block_table = pd.DataFrame({'chain_id': chain_id, 'chain_name': chain_name, 'block_number': chain_blocks}, index=[0])
+            else:
+                block_table = block_table.append({'chain_id': chain_id, 'chain_name': chain_name, 'block_number': chain_blocks}, ignore_index=True)
+            logger.info(f"chain_id: {chain_id}, chain_name: {chain_name} processed")
+        block_table = pd.DataFrame(block_table)
+        # Save data to database if table exists, otherwise create table
+        if table_exists(db_url, table_name):
+            drop_table(db_url, table_name)
+
+        save_table(db_url, table_name, block_table)
+        logger.info(f"Create Current Block Table - Time elapsed: {datetime.now() - start_time}")
+
+    except Exception as e:
+        print(f"Cannot create block table: {traceback.format_exc()}")
+        return
+

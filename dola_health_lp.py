@@ -55,15 +55,9 @@ def process_row(row, blocks_row,result_state):
         
         for block in blocks_row[blocks_row > row['start_block']]:
             #print(f"Processing block {block} for {row['chain_name_y']}")
-            print(f"Formula Asset: {row['formula_asset']},value: {get_custom_state(w3, row['abi'], row['formula_asset'], block)}")
-            print(f"Formula Asset: {row['formula_liability']},value: {get_custom_state(w3, row['abi'], row['formula_liability'], block)}")
+            #print(f"Formula Asset: {row['formula_asset']},value: {get_custom_state(w3, row['abi'], row['formula_asset'], block)}")
+            #print(f"Formula Asset: {row['formula_liability']},value: {get_custom_state(w3, row['abi'], row['formula_liability'], block)}")
             
-            # if there is a formula for liability, first we check if there is a + in the formula
-            # if there is a + in the formula, then we need to split the formula into two parts and get the value before applying the formula
-            # if there is no + in the formula, then we just apply the formula
-            
-            #then we inswert the result into the result state
-            # id	chain_id	chain_name	type	abi_address	contract_address	protocol	account	Name	start_block	function	value_liability	value_asset
             result_state.append({
                 'chain_id': row['chain_id'],
                 'chain_name': row['chain_name_y'],

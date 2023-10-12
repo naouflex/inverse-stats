@@ -6,7 +6,8 @@ import io
 
 
 
-def table_exists(engine, table_name):
+def table_exists(db_url, table_name):
+    engine = create_engine(db_url)
     return engine.dialect.has_table(engine.connect(), table_name)
 
 def map_dtype(dtype):
@@ -75,7 +76,7 @@ def save_table(db_url, table_name, df):
     df = pd.DataFrame(df)
 
     try:
-        if not table_exists(engine, table_name):
+        if not table_exists(db_url, table_name):
             create_table_from_df(engine, table_name, df)
 
         buffer = io.StringIO()
@@ -103,7 +104,7 @@ def save_table(db_url, table_name, df):
 def get_table(db_url, table_name):
     engine = create_engine(db_url)
 
-    if not table_exists(engine, table_name):
+    if not table_exists(db_url, table_name):
         print(f"Table {table_name} does not exist")
         return None
     else:
@@ -119,7 +120,7 @@ def get_table(db_url, table_name):
 def update_table(db_url, table_name,df):
     engine = create_engine(db_url)
     try:
-        if not table_exists(engine, table_name):
+        if not table_exists(db_url, table_name):
             print(f"Table {table_name} does not exist")
             return None
         df = df[df.columns] 
@@ -158,7 +159,7 @@ def update_table(db_url, table_name,df):
 def remove_duplicates(db_url, table, duplicate_columns, order_column):
     engine = create_engine(db_url)
     try:
-        if not table_exists(engine, table):
+        if not table_exists(db_url, table):
             print(f"Table {table} does not exist")
             return None
         else:
@@ -189,7 +190,7 @@ def remove_duplicates(db_url, table, duplicate_columns, order_column):
 def drop_table(db_url, table_name):
     engine = create_engine(db_url)
     try:
-        if not table_exists(engine, table_name):
+        if not table_exists(db_url, table_name):
             print(f"Table {table_name} does not exist")
             return None
         else:

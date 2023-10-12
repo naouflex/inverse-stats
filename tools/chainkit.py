@@ -51,7 +51,7 @@ def find_block_for_date(w3,current_date, df_list):
     })
 
 
-def get_blocks_by_date_range(w3,start_date, end_date):
+def get_blocks_by_date_range(w3,start_date, end_date=None):
     if not w3.isConnected():
         print("Not connected to Ethereum node.")
         return None
@@ -86,6 +86,15 @@ def get_blocks_by_date_range(w3,start_date, end_date):
     df.loc[df['block_number'] <= 1, 'block_number'] = None
     
     return df
+
+def get_blocks_for_date(w3, date):
+    midnight_timestamp = datetime_to_unixtimestamp(date)
+
+    block_after_midnight = first_block_after_midnight(w3, midnight_timestamp)
+    if block_after_midnight is not None:
+        block_after_midnight = int(block_after_midnight)
+    
+    return block_after_midnight
 
 
 def get_call_result(w3,contract_address,method_name,abi,arguments,block_identifier='latest'):
