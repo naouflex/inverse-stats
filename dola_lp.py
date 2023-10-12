@@ -7,8 +7,8 @@ from datetime import datetime
 from decimal import Decimal
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
+from tools.chainkit import get_call_result
 from tools.database import save_table, get_table,update_table
-from tools.chainkit import get_custom_state
 from dotenv import load_dotenv
 import logging
 
@@ -43,7 +43,33 @@ def build_methodology_table():
         traceback.print_exc()
         return None
 
-def process_row(row, blocks_row,result_state):
+def evaluate_formula(w3, abi, prices,string,block_identifier):
+    #if string is none null empty or nan, return None
+    if string is None or pd.isnull(string) or string == '':
+        return None
+    contract_address = string.split(':')[0]
+    method_name = string.split(':')[1].split('(')[0]
+    arguments = string.split(':')[1].split('(')[1][:-1].split(',')
+    # if string contains index and sub index, then we need to get the index and sub index
+    if '[' in string and ']' in string:
+        index = string.split('[')[1].split(']')[0].split('][')[0]
+        sub_index = string.split('[')[1].split(']')[0].split('][')[1]
+
+    # if no arguments, then we call the method directly
+    if len(arguments) == 1 and arguments[0] == '':
+        return get_call_result(w3,contract_address,method_name,abi,[],block_identifier)
+    # if len is 42 then we have a single argument and convert it to a checksum address
+    elif len(arguments) == 1 and len(arguments[0]) == 42:
+        return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)
+    # if len is 66 then we have a single argument and return usibng index and sub index
+    elif len(arguments) == 1 and len(arguments[0]) == 66:
+        try:
+            return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)[int(index)][int(sub_index)]
+        except:
+            print(f"Error in getting custom state for {string}")
+            return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)
+
+def process_row(row, prices, blocks_row,result_state):
     try:
         #blocks_row is a pd series
         contract_start_time = datetime.now()
@@ -55,8 +81,8 @@ def process_row(row, blocks_row,result_state):
         
         for block in blocks_row[blocks_row > row['start_block']]:
             #print(f"Processing block {block} for {row['chain_name_y']}")
-            #print(f"Formula Asset: {row['formula_asset']},value: {get_custom_state(w3, row['abi'], row['formula_asset'], block)}")
-            #print(f"Formula Asset: {row['formula_liability']},value: {get_custom_state(w3, row['abi'], row['formula_liability'], block)}")
+            print(f"Formula Asset: {row['formula_asset']},value: {evaluate_formula(w3, row['abi'],prices, row['formula_asset'], block)}")
+            print(f"Formula Asset: {row['formula_liability']},value: {evaluate_formula(w3, row['abi'],prices, row['formula_liability'], block)}")
             
             result_state.append({
                 'chain_id': row['chain_id'],
@@ -66,14 +92,12 @@ def process_row(row, blocks_row,result_state):
                 'account': row['account'],
                 'name': row['name'],
                 'start_block': row['start_block'],
-                'value_liability': get_custom_state(w3, row['abi'], row['formula_liability'], block),
-                'value_asset': get_custom_state(w3, row['abi'], row['formula_asset'], block),
+                'value_liability': evaluate_formula(w3, row['abi'],prices, row['formula_liability'], block),
+                'value_asset': evaluate_formula(w3, row['abi'],prices, row['formula_asset'], block),
                 'block_number': block,
                 'block_timestamp': w3.eth.getBlock(block).timestamp,
                 'last_updated': datetime.now(),
             })
-
-
             
     except Exception as e:
         print(traceback.format_exc())
@@ -81,7 +105,9 @@ def process_row(row, blocks_row,result_state):
 try:
     start_time = datetime.now()
     full_methodology = build_methodology_table()
+
     blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
+    prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
 
     print(full_methodology)
     result_state = []
@@ -90,7 +116,7 @@ try:
     for i in range(len(full_methodology)):
         row = full_methodology.iloc[i]
         blocks_row = blocks[row['chain_name_y']]
-        row_list.append((row, blocks_row, result_state))
+        row_list.append((row,prices, blocks_row, result_state))
 
     threads = []
     
@@ -106,6 +132,7 @@ try:
         thread.join()
     
     result_state = pd.DataFrame(result_state)
+    print(result_state)
     
     logger.info(f"Total execution time: {datetime.now() - start_time}")
     

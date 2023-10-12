@@ -103,33 +103,6 @@ def get_call_result(w3,contract_address,method_name,abi,arguments,block_identifi
     return call.call(block_identifier=block_identifier)
 
 
-def get_custom_state(w3,abi,string,block_identifier):
-    #if stribng is none null empty or nan, return None
-    if string is None or pd.isnull(string) or string == '':
-        return None
-    contract_address = string.split(':')[0]
-    method_name = string.split(':')[1].split('(')[0]
-    arguments = string.split(':')[1].split('(')[1][:-1].split(',')
-    # if string contains index and sub index, then we need to get the index and sub index
-    if '[' in string and ']' in string:
-        index = string.split('[')[1].split(']')[0].split('][')[0]
-        sub_index = string.split('[')[1].split(']')[0].split('][')[1]
-
-    # if no arguments, then we call the method directly
-    if len(arguments) == 1 and arguments[0] == '':
-        return get_call_result(w3,contract_address,method_name,abi,[],block_identifier)
-    # if len is 42 then we have a single argument and convert it to a checksum address
-    elif len(arguments) == 1 and len(arguments[0]) == 42:
-        return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)
-    # if len is 66 then we have a single argument and return usibng index and sub index
-    elif len(arguments) == 1 and len(arguments[0]) == 66:
-        try:
-            return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)[int(index)][int(sub_index)]
-        except:
-            print(f"Error in getting custom state for {string}")
-            return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)
-
-
 
 
 
