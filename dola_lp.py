@@ -69,6 +69,43 @@ def evaluate_formula(w3, abi, prices,string,block_identifier):
             print(f"Error in getting custom state for {string}")
             return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)
 
+def break_down_formula(string):
+    # breakdown formula in parts sepereated by + - * / 
+    formulae = []
+    if string is None or pd.isnull(string) or string == '':
+        return None
+    if '+' in string or '-' in string or '*' in string or '/' in string:
+        for i in string.split('+'):
+            if '-' in i:
+                for j in i.split('-'):
+                    if '*' in j:
+                        for k in j.split('*'):
+                            if '/' in k:
+                                for l in k.split('/'):
+                                    formulae.append(l)
+                            else:
+                                formulae.append(k)
+                    elif '/' in j:
+                        for k in j.split('/'):
+                            formulae.append(k)
+                    else:
+                        formulae.append(j)
+            elif '*' in i:
+                for j in i.split('*'):
+                    if '/' in j:
+                        for k in j.split('/'):
+                            formulae.append(k)
+                    else:
+                        formulae.append(j)
+            elif '/' in i:
+                for j in i.split('/'):
+                    formulae.append(j)
+            else:
+                formulae.append(i)
+    else:
+        formulae.append(string)
+    return formulae
+
 def process_row(row, prices, blocks_row,result_state):
     try:
         #blocks_row is a pd series
