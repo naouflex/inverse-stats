@@ -7,17 +7,17 @@ from datetime import datetime
 from decimal import Decimal
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from tools.chainkit import get_call_result
-from tools.database import save_table, get_table,update_table
+from tools.database import drop_table, save_table, get_table, table_exists,update_table
 from dotenv import load_dotenv
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 
-logger = logging.getLogger(__name__)
-MAX_THREADS = 10
 
 #logger writes to log.txt
 logging.basicConfig(filename='log.txt',level=logging.ERROR)
+logger = logging.getLogger(__name__)
+MAX_THREADS = 10
 
 load_dotenv()
 
@@ -44,7 +44,7 @@ def build_methodology_table():
         return full_methodology
     
     except Exception as e:
-        logger.error(f"Error in getting methodology : {e}")
+        print(f"Error in getting methodology : {e}")
         traceback.print_exc()
         return None
 
@@ -91,17 +91,31 @@ def evaluate_operand(operand, w3, abi, prices, block_identifier, timestamp):
             except Exception as e:
                 print(f"Error in evaluating method: {operand} : {e}")
                 return 0
+            
         elif operand[0] == '%':
             try:
                 chain_slug, contract_address = operand[1:].split(':')
-                price = prices[(prices['chain'] == chain_slug) & (prices['token_address'].str.lower() == contract_address.lower()) & (prices['timestamp'] <= int(timestamp))].iloc[-1]['price']
                 
+                filtered_prices = prices[
+                    (prices['chain'] == chain_slug) &
+                    (prices['token_address'].str.lower() == contract_address.lower()) &
+                    (prices['timestamp'] <= int(timestamp))
+                ]
+
+                # Check if the DataFrame is empty
+                if filtered_prices.empty:
+                    raise ValueError(f"Price cannot be found for %s:%s" % (chain_slug, contract_address))
+                else:
+                    # Sort by timestamp to make sure the latest price is at the end
+                    sorted_prices = filtered_prices.sort_values(by='timestamp')
+                    price = sorted_prices.iloc[-1]['price']
+
                 if price is not None:
                     decimals = int(prices[(prices['chain'] == chain_slug) & (prices['token_address'].str.lower() == contract_address.lower())]['decimals'].iloc[0])
                     price = Decimal(price) / Decimal(10 ** int(decimals))
                 return price or 0
             except Exception as e:
-                print(f"Price cannot be found for {operand} : {e}")
+                print(f"Price cannot be found for {operand} at timestamp {timestamp}")
                 return 0
 
         
@@ -134,7 +148,6 @@ def apply_operator(operator, operand1, operand2):
             raise ValueError("Division by zero")
     else:
         return None
-
 
 # Get operator precedence
 def precedence(operator):
@@ -183,7 +196,7 @@ def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp):
     return evaluate_postfix(postfix, w3, abi,prices, block_identifier, block_timestamp)
 
 
-def process_row(row, prices, blocks,result):
+def process_row(row, prices, blocks,data):
     try:
         #blocks_row is a pd series
         contract_start_time = datetime.now()
@@ -195,6 +208,8 @@ def process_row(row, prices, blocks,result):
         #filter out blocks lower than row['start_block'] and NaN or None values
         blocks = blocks[blocks[row['chain_name_y']] >= row['start_block']]
         blocks = blocks[blocks[row['chain_name_y']].notnull()]
+        
+        print(f"Processing row {row['Name']} with {len(blocks)} blocks")
 
         for i in range(len(blocks)):
             block_timestamp = blocks.iloc[i]['date']
@@ -203,65 +218,66 @@ def process_row(row, prices, blocks,result):
             # if None or block_identifier < row['start_block'] or Nan
             if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
                 continue
+            try :
+                formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp)
+            except Exception as e:
+                formulae_asset = 'Error'
+                print(f"Error in evaluating formulae_asset : {e} : {traceback.format_exc()}")
+            try:
+                formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp)
+            except Exception as e:
+                formulae_liability = 'Error'
+                print(f"Error in evaluating formulae_liability : {e} : {traceback.format_exc()}")
 
-            formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp)
-            formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp)
-
-            result = result.append({'chain_id':row['chain_id'],
-                                                'chain_name_x':row['chain_name_x'],
-                                                'chain_name_y':row['chain_name_y'],
-                                                'date':block_timestamp,
-                                                'block_number':block_identifier,
-                                                'protocol':row['protocol'],
-                                                'account':row['account'],
-                                                'name':row['Name'],
-                                                'contract_address':row['contract_address'],
-                                                'formula_asset':formulae_asset,
-                                                'formula_liability':formulae_liability},ignore_index=True)
-
-            print(formulae_asset)
-            print(formulae_liability)
+            
+            data.update({
+                    'date':block_timestamp,
+                    'block_number':block_identifier,
+                    'chain_id':row['chain_id_x'],
+                    'chain_name_x':row['chain_name_x'],
+                    'protocol':row['protocol'],
+                    'account':row['account'],
+                    'name':row['Name'],
+                    'contract_address':row['contract_address'],
+                    'formula_asset':formulae_asset,
+                    'formula_liability':formulae_liability
+                })
+                
+        print(f"Processed row {row['Name']} in {datetime.now() - contract_start_time}")
 
     except Exception as e:
-        logger.error(f"Error in processing row : {e} : {traceback.format_exc()}")
+        print(f"Error in processing row : {e} : {traceback.format_exc()} results : {formulae_asset} : {formulae_liability}")
         pass
 
 try:
+    db_url = os.getenv('PROD_DB')
+    table_name = 'methodology_results'
+
     start_time = datetime.now()
     full_methodology = build_methodology_table()
 
     blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
     prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
-
-    print(full_methodology)
-    result_state = []
+    
+    data = {}
     row_list = []
 
     for i in range(len(full_methodology)):
         row = full_methodology.iloc[i]
         # subset blocks on date and row['chain_name_y']
         blocks_row = blocks[['date',row['chain_name_y']]]
-        row_list.append((row,prices, blocks_row, result_state))
+        row_list.append((row,prices, blocks_row, data))
 
-    threads = []
+    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+        for row_data in row_list:
+            executor.submit(process_row, *row_data)
+            
+    result_state = pd.DataFrame(data)
     
-    # We want 10 threads at most concurrently running; when one stops, another one starts
-    for row_data in row_list:
-        t = threading.Thread(target=process_row, args=row_data)
-        threads.append(t)
-        t.start()
-        while threading.active_count() > MAX_THREADS:
-            pass
-    
-    for thread in threads:
-        thread.join()
-    
-    result_state = pd.DataFrame(result_state)
-    print(result_state)
-    
-    logger.info(f"Total execution time: {datetime.now() - start_time}")
+    print(f"Total execution time: {datetime.now() - start_time}")
     
 except Exception as e:
     logger.error(traceback.format_exc())
+    exit(1) 
 
 

@@ -18,6 +18,8 @@ def fetch_json(url):
 
 def fetch_token_data(chain_slug, contract_address):
     url = f"https://coins.llama.fi/prices/first/{chain_slug}:{contract_address}"
+    # take care of 0x0000000000000000000000000000000000000000
+    
     return fetch_json(url)
 
 def fetch_chart_data(chain_slug, contract_address, start_timestamp, days):
@@ -49,7 +51,9 @@ def fetch_and_update_data(token_info, data):
         data['coins'].update(chart_data['coins'])
 
     except Exception as e:
-        print(traceback.print_exc())
+        print(f"Error in fetch_and_update_data for {token_info} : {traceback.print_exc()}")
+        print("Please check if the token is still valid on defillama")
+        pass
 
 def fetch_current_prices_from_tokens(token_address_list):
     tokens = ','.join([f"{info['chain_slug']}:{info['contract_address']}" for info in token_address_list])

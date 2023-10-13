@@ -85,6 +85,13 @@ def save_table(db_url, table_name, df):
         raw_conn = engine.raw_connection()
 
         try:
+            # check that table exists and buffer is not empty
+            if not table_exists(db_url, table_name):
+                print(f"Table {table_name} does not exist")
+                return None
+            elif len(df) == 0:
+                print(f"No rows to save in {table_name}")
+                return None
             with raw_conn.cursor() as cur:
                 cur.copy_from(buffer, table_name, sep=',', null='')
             raw_conn.commit()

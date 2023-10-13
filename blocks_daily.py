@@ -154,37 +154,5 @@ def create_current():
     except Exception as e:
         print(f"Cannot create block table: {e}")
         return
-    
-    try:
-        start_time = datetime.now()
 
-        db_url = os.getenv('PROD_DB')
-        table_name = 'blocks_current'
-
-        web3_providers = get_rpc_table()
-
-        for i in range(len(web3_providers)):
-            w3 = Web3(Web3.HTTPProvider(web3_providers['rpc_url'][i]))
-            w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-            chain_id = web3_providers['chain_id'][i]
-            chain_name = web3_providers['chain_name'][i]
-
-            chain_blocks = w3.eth.blockNumber
-            
-            if i==0:
-                block_table = pd.DataFrame({'chain_id': chain_id, 'chain_name': chain_name, 'block_number': chain_blocks}, index=[0])
-            else:
-                block_table = block_table.append({'chain_id': chain_id, 'chain_name': chain_name, 'block_number': chain_blocks}, ignore_index=True)
-            logger.info(f"chain_id: {chain_id}, chain_name: {chain_name} processed")
-        block_table = pd.DataFrame(block_table)
-        # Save data to database if table exists, otherwise create table
-        if table_exists(db_url, table_name):
-            drop_table(db_url, table_name)
-
-        save_table(db_url, table_name, block_table)
-        logger.info(f"Create Current Block Table - Time elapsed: {datetime.now() - start_time}")
-
-    except Exception as e:
-        print(f"Cannot create block table: {traceback.format_exc()}")
-        return
 
