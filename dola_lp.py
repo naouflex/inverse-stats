@@ -11,6 +11,7 @@ from tools.chainkit import get_call_result
 from tools.database import save_table, get_table,update_table
 from dotenv import load_dotenv
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -43,70 +44,76 @@ def build_methodology_table():
         traceback.print_exc()
         return None
 
-def evaluate_formula(w3, abi, prices,string,block_identifier):
-    #if string is none null empty or nan, return None
-    if string is None or pd.isnull(string) or string == '':
-        return None
-    contract_address = string.split(':')[0]
-    method_name = string.split(':')[1].split('(')[0]
-    arguments = string.split(':')[1].split('(')[1][:-1].split(',')
-    # if string contains index and sub index, then we need to get the index and sub index
-    if '[' in string and ']' in string:
-        index = string.split('[')[1].split(']')[0].split('][')[0]
-        sub_index = string.split('[')[1].split(']')[0].split('][')[1]
+def evaluate_operand(operand):
+    # Replace with your logic to evaluate operand
+    return float(operand)
 
-    # if no arguments, then we call the method directly
-    if len(arguments) == 1 and arguments[0] == '':
-        return get_call_result(w3,contract_address,method_name,abi,[],block_identifier)
-    # if len is 42 then we have a single argument and convert it to a checksum address
-    elif len(arguments) == 1 and len(arguments[0]) == 42:
-        return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)
-    # if len is 66 then we have a single argument and return usibng index and sub index
-    elif len(arguments) == 1 and len(arguments[0]) == 66:
-        try:
-            return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)[int(index)][int(sub_index)]
-        except:
-            print(f"Error in getting custom state for {string}")
-            return get_call_result(w3,contract_address,method_name,abi,[arguments[0]],block_identifier)
+# Apply operator
+def apply_operator(operator, operand1, operand2):
+    if operator == '+':
+        return operand1 + operand2
+    elif operator == '-':
+        return operand1 - operand2
+    elif operator == '*':
+        return operand1 * operand2
+    elif operator == '/':
+        if operand2 != 0:
+            return operand1 / operand2
+        else:
+            raise ValueError("Division by zero")
+    else:
+        return None
+
+# Get operator precedence
+def precedence(operator):
+    return {'+': 1, '-': 1, '*': 2, '/': 2}.get(operator, 0)
+
+def shunting_yard_infix_to_postfix(parts):
+    output = []
+    operators = []
+
+    for part in parts:
+        if part in ['+', '-', '*', '/']:
+            while operators and precedence(operators[-1]) >= precedence(part):
+                output.append(operators.pop())
+            operators.append(part)
+        else:
+            output.append(part)
+    
+    while operators:
+        output.append(operators.pop())
+
+    return output
+
+def evaluate_postfix(postfix):
+    stack = []
+
+    for element in postfix:
+        if element in ['+', '-', '*', '/']:
+            operand2 = stack.pop()
+            operand1 = stack.pop()
+            stack.append(apply_operator(element, operand1, operand2))
+        else:
+            stack.append(evaluate_operand(element))
+    
+    return stack[0]
 
 def break_down_formula(string):
-    # breakdown formula in parts sepereated by + - * / 
-    formulae = []
     if string is None or pd.isnull(string) or string == '':
         return None
-    if '+' in string or '-' in string or '*' in string or '/' in string:
-        for i in string.split('+'):
-            if '-' in i:
-                for j in i.split('-'):
-                    if '*' in j:
-                        for k in j.split('*'):
-                            if '/' in k:
-                                for l in k.split('/'):
-                                    formulae.append(l)
-                            else:
-                                formulae.append(k)
-                    elif '/' in j:
-                        for k in j.split('/'):
-                            formulae.append(k)
-                    else:
-                        formulae.append(j)
-            elif '*' in i:
-                for j in i.split('*'):
-                    if '/' in j:
-                        for k in j.split('/'):
-                            formulae.append(k)
-                    else:
-                        formulae.append(j)
-            elif '/' in i:
-                for j in i.split('/'):
-                    formulae.append(j)
-            else:
-                formulae.append(i)
-    else:
-        formulae.append(string)
-    return formulae
+    
+    # Tokenize the formula into its basic elements
+    parts = re.split(r'([\+\-\*/])', string)
+    parts = [part.strip() for part in parts if part.strip() != '']
+    
+    # Convert infix to postfix using Shunting Yard Algorithm
+    postfix = shunting_yard_infix_to_postfix(parts)
+    
+    # Evaluate the postfix expression
+    return evaluate_postfix(postfix)
 
-def process_row(row, prices, blocks_row,result_state):
+
+def process_row(row, prices, blocks,result_state):
     try:
         #blocks_row is a pd series
         contract_start_time = datetime.now()
@@ -116,26 +123,22 @@ def process_row(row, prices, blocks_row,result_state):
         w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         contract = w3.eth.contract(address=Web3.toChecksumAddress(row['abi_address']), abi=(row['abi']))
         
-        for block in blocks_row[blocks_row > row['start_block']]:
-            #print(f"Processing block {block} for {row['chain_name_y']}")
-            print(f"Formula Asset: {row['formula_asset']},value: {evaluate_formula(w3, row['abi'],prices, row['formula_asset'], block)}")
-            print(f"Formula Asset: {row['formula_liability']},value: {evaluate_formula(w3, row['abi'],prices, row['formula_liability'], block)}")
-            
-            result_state.append({
-                'chain_id': row['chain_id'],
-                'chain_name': row['chain_name_y'],
-                'contract_address': row['contract_address'],
-                'protocol': row['protocol'],
-                'account': row['account'],
-                'name': row['name'],
-                'start_block': row['start_block'],
-                'value_liability': evaluate_formula(w3, row['abi'],prices, row['formula_liability'], block),
-                'value_asset': evaluate_formula(w3, row['abi'],prices, row['formula_asset'], block),
-                'block_number': block,
-                'block_timestamp': w3.eth.getBlock(block).timestamp,
-                'last_updated': datetime.now(),
-            })
-            
+        for i in range(len(blocks)):
+            block_timestamp = blocks.iloc[i]['date']
+            block_identifier = blocks.iloc[i][row['chain_name_y']]
+
+            # if None or block_identifier < row['start_block'] or Nan
+            if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
+                continue
+
+            formulae_asset = break_down_formula(row['formula_asset'])
+            formulae_liability = break_down_formula(row['formula_liability'])
+
+            print(formulae_asset)
+
+
+
+
     except Exception as e:
         print(traceback.format_exc())
 
@@ -152,7 +155,8 @@ try:
 
     for i in range(len(full_methodology)):
         row = full_methodology.iloc[i]
-        blocks_row = blocks[row['chain_name_y']]
+        # subset blocks on date and row['chain_name_y']
+        blocks_row = blocks[['date',row['chain_name_y']]]
         row_list.append((row,prices, blocks_row, result_state))
 
     threads = []
