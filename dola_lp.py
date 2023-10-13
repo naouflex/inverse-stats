@@ -45,7 +45,8 @@ def build_methodology_table():
         return None
 
 def evaluate_operand(operand):
-    # Replace with your logic to evaluate operand
+    if operand is None or pd.isnull(operand) or operand == '':
+        return None
     return float(operand)
 
 # Apply operator
