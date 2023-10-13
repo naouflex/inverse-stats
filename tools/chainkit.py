@@ -98,8 +98,10 @@ def get_blocks_for_date(w3, date):
 
 
 def get_call_result(w3,contract_address,method_name,abi,arguments,block_identifier='latest'):
-    contract = w3.eth.contract(address=contract_address, abi=abi)
-    call = getattr(contract.functions, method_name)(*arguments)
+    contract = w3.eth.contract(address=w3.toChecksumAddress(contract_address), abi=abi)
+    call = getattr(contract.functions, method_name)
+    if arguments is not None:
+        call = call(arguments)
     return call.call(block_identifier=block_identifier)
 
 

@@ -200,7 +200,9 @@ def create_current():
         # Make sure all columns are in the proper format
         df = df.astype(valid_keys)
 
-        # Save data to database
+        # Save data to database if table exists, otherwise create table
+        if table_exists(db_url, table_name):
+            drop_table(db_url, table_name)
         save_table(db_url, table_name, df)
         end_time = datetime.now()
         logger.info(f"Total time: {end_time - start_time}")
