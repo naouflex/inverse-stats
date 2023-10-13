@@ -164,7 +164,6 @@ def create_current():
         # Fetch current prices for all tokens using the new API
         fetch_and_save_current_data(token_address_list, data)
 
-
         # Rest of the data processing is the same as before
         df = pd.DataFrame(data)
         
