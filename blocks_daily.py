@@ -145,6 +145,9 @@ def create_current():
                 block_table = block_table.append({'chain_id': chain_id, 'chain_name': chain_name, 'block_number': chain_blocks}, ignore_index=True)
             logger.info(f"chain_id: {chain_id}, chain_name: {chain_name} processed")
         block_table = pd.DataFrame(block_table)
+        # Save data to database if table exists, otherwise create table
+        if table_exists(db_url, table_name):
+            drop_table(db_url, table_name)
         save_table(db_url,table_name,block_table)
         logger.info(f"Create Current Block Table - Time elapsed: {datetime.now() - start_time}")
 
@@ -152,7 +155,6 @@ def create_current():
         print(f"Cannot create block table: {e}")
         return
     
-def update_current():
     try:
         start_time = datetime.now()
 
