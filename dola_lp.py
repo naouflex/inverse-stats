@@ -7,17 +7,16 @@ from datetime import datetime
 from decimal import Decimal
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from tools.database import drop_table, save_table, get_table, table_exists,update_table
+from tools.database import drop_table, save_table, get_table, table_exists,update_table,remove_duplicates,create_table_from_df
 from dotenv import load_dotenv
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
 
-#logger writes to log.txt
-logging.basicConfig(filename='log.txt',level=logging.ERROR)
 logger = logging.getLogger(__name__)
-MAX_THREADS = 8
+MAX_THREADS = 12
 
+lock = threading.Lock()
 load_dotenv()
 
 def build_methodology_table():
@@ -177,7 +176,6 @@ def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp)
             stack.append(evaluate_operand(element, w3,abi, prices, block_identifier, block_timestamp))
     return stack[0]
 
-
 def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp):
     if string is None or pd.isnull(string) or string == '':
         return None
@@ -191,7 +189,6 @@ def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp):
     
     # Evaluate the postfix expression
     return evaluate_postfix(postfix, w3, abi,prices, block_identifier, block_timestamp)
-
 
 def process_row(row, prices, blocks,data):
     try:
@@ -226,7 +223,7 @@ def process_row(row, prices, blocks,data):
                 formulae_liability = 'Error'
                 print(f"Error in evaluating formulae_liability : {e} : {traceback.format_exc()}")
             
-            data.update({
+            temp_data = {
                     'timestamp':block_timestamp,
                     'block_number':block_identifier,
                     'chain_id':row['chain_id_x'],
@@ -237,7 +234,10 @@ def process_row(row, prices, blocks,data):
                     'contract_address':row['contract_address'],
                     'formula_asset':formulae_asset,
                     'formula_liability':formulae_liability
-                })
+                }
+
+            with lock:
+                data.append(temp_data)
                 
         print(f"Processed row {row['Name']} in {datetime.now() - contract_start_time}")
 
@@ -245,56 +245,58 @@ def process_row(row, prices, blocks,data):
         print(f"Error in processing row : {e} : {traceback.format_exc()} results : {formulae_asset} : {formulae_liability}")
         pass
 
-try:
-    db_url = os.getenv('PROD_DB')
-    table_name = 'methodology_results'
+def create_history(db_url,table_name):
+    try:
+        start_time = datetime.now()
+        full_methodology = build_methodology_table()
 
-    start_time = datetime.now()
-    full_methodology = build_methodology_table()
+        blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
+        prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
+        
+        data = []
+        row_list = []
 
-    blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
-    prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
-    
-    data = {}
-    row_list = []
+        for i in range(len(full_methodology)):
+            row = full_methodology.iloc[i]
+            # subset blocks on date and row['chain_name_y']
+            blocks_row = blocks[['date',row['chain_name_y']]]
+            row_list.append((row,prices, blocks_row, data))
 
-    for i in range(len(full_methodology)):
-        row = full_methodology.iloc[i]
-        # subset blocks on date and row['chain_name_y']
-        blocks_row = blocks[['date',row['chain_name_y']]]
-        row_list.append((row,prices, blocks_row, data))
+        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+            for row_data in row_list:
+                executor.submit(process_row, *row_data)
 
-    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-        for row_data in row_list:
-            executor.submit(process_row, *row_data)
-    
-    print(data)
+        data = pd.DataFrame(data)
 
-    data = pd.DataFrame([data])
+        # Filter out any keys not in DataFrame columns
+        valid_keys = {k: v for k, v in {
+            'timestamp': 'Int64', 
+            'block_number': 'Int64',
+            'chain_id': 'Int64',
+            'chain_name_x': 'string',
+            'protocol': 'string',
+            'account': 'string',
+            'name': 'string',
+            'contract_address': 'string',
+            'formula_asset': 'float64',
+            'formula_liability': 'float64'
+        }.items() if k in data.columns}
 
-    # Filter out any keys not in DataFrame columns
-    valid_keys = {k: v for k, v in {
-        'timestamp': 'Int64', 
-        'block_number': 'Int64',
-        'chain_id': 'Int64',
-        'chain_name_x': 'string',
-        'protocol': 'string',
-        'account': 'string',
-        'name': 'string',
-        'contract_address': 'string',
-        'formula_asset': 'string',
-        'formula_liability': 'string'
-    }.items() if k in data.columns}
+        data = data.astype(valid_keys)
+        save_table(db_url,table_name,data)
 
-    data = data.astype(valid_keys)
+        print(f"Total execution time: {datetime.now() - start_time}")
+        
+    except Exception as e:
+        print(traceback.format_exc())
+        print(f"Total execution time: {datetime.now() - start_time}")
 
-    save_table(db_url,table_name,data)
-
-
-    print(f"Total execution time: {datetime.now() - start_time}")
-    
-except Exception as e:
-    print(traceback.format_exc())
-    print(f"Total execution time: {datetime.now() - start_time}")
+def create_current():
+    return
 
 
+db_url = os.getenv('PROD_DB')
+table_name = 'dola_lp'
+
+#create_history(db_url,table_name)
+remove_duplicates(db_url,table_name)

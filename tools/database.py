@@ -163,7 +163,7 @@ def update_table(db_url, table_name,df):
         print(f"An error occurred: {e}")
         print(traceback.format_exc())
 
-def remove_duplicates(db_url, table_name, duplicate_columns, order_column):
+def remove_duplicates(db_url, table_name, duplicate_columns=None, order_column=None):
     engine = create_engine(db_url)
 
     try:
@@ -176,10 +176,19 @@ def remove_duplicates(db_url, table_name, duplicate_columns, order_column):
             stmt = select(table.c)  # Fix is here
             with engine.connect() as conn:
                 results = conn.execute(stmt).fetchall()
+
+            if duplicate_columns is None:
+                duplicate_columns = table.columns.keys()
+
+            if order_column is None:
+                order_column = table.columns.keys()[0]
+
             df = pd.DataFrame(results, columns=table.columns.keys())
+
+            df = df.sort_values(by=[order_column], ascending=False)
+
+            df = df.drop_duplicates(subset=duplicate_columns, keep='first')
             
-            df = df.sort_values(order_column)
-            df = df.drop_duplicates(subset=duplicate_columns, keep='last')
             
             # drop table
             table.drop(engine)
