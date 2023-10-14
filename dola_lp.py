@@ -13,11 +13,10 @@ import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
 
-
 #logger writes to log.txt
 logging.basicConfig(filename='log.txt',level=logging.ERROR)
 logger = logging.getLogger(__name__)
-MAX_THREADS = 10
+MAX_THREADS = 8
 
 load_dotenv()
 
@@ -118,7 +117,6 @@ def evaluate_operand(operand, w3, abi, prices, block_identifier, timestamp):
                 print(f"Price cannot be found for {operand} at timestamp {timestamp}")
                 return 0
 
-        
     except Exception as e:
         print(traceback.format_exc())
         return 0
@@ -167,7 +165,6 @@ def shunting_yard_infix_to_postfix(parts):
         output.append(operators.pop())
 
     return output
-
 
 def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp):
     stack = []
@@ -228,10 +225,9 @@ def process_row(row, prices, blocks,data):
             except Exception as e:
                 formulae_liability = 'Error'
                 print(f"Error in evaluating formulae_liability : {e} : {traceback.format_exc()}")
-
             
             data.update({
-                    'date':block_timestamp,
+                    'timestamp':block_timestamp,
                     'block_number':block_identifier,
                     'chain_id':row['chain_id_x'],
                     'chain_name_x':row['chain_name_x'],
@@ -271,13 +267,34 @@ try:
     with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
         for row_data in row_list:
             executor.submit(process_row, *row_data)
-            
-    result_state = pd.DataFrame(data)
     
+    print(data)
+
+    data = pd.DataFrame([data])
+
+    # Filter out any keys not in DataFrame columns
+    valid_keys = {k: v for k, v in {
+        'timestamp': 'Int64', 
+        'block_number': 'Int64',
+        'chain_id': 'Int64',
+        'chain_name_x': 'string',
+        'protocol': 'string',
+        'account': 'string',
+        'name': 'string',
+        'contract_address': 'string',
+        'formula_asset': 'string',
+        'formula_liability': 'string'
+    }.items() if k in data.columns}
+
+    data = data.astype(valid_keys)
+
+    save_table(db_url,table_name,data)
+
+
     print(f"Total execution time: {datetime.now() - start_time}")
     
 except Exception as e:
-    logger.error(traceback.format_exc())
-    exit(1) 
+    print(traceback.format_exc())
+    print(f"Total execution time: {datetime.now() - start_time}")
 
 

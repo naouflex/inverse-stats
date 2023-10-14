@@ -18,8 +18,6 @@ def fetch_json(url):
 
 def fetch_token_data(chain_slug, contract_address):
     url = f"https://coins.llama.fi/prices/first/{chain_slug}:{contract_address}"
-    # take care of 0x0000000000000000000000000000000000000000
-    
     return fetch_json(url)
 
 def fetch_chart_data(chain_slug, contract_address, start_timestamp, days):
@@ -176,7 +174,7 @@ def create_current():
         df[['chain', 'token_address']] = df['chain:token_address'].str.split(':', expand=True)
         df = pd.concat([df.drop(['coins', 'chain:token_address'], axis=1), df['coins'].apply(pd.Series)], axis=1)
         df = df.explode('prices')
-        #prices [1697104809, 0.999414] -> timestamp, price
+        
         df = pd.concat([df.drop(['prices'], axis=1), df['prices'].apply(pd.Series)], axis=1)
         # rename 0 and 1 to timestamp and price
         df.rename(columns={0: 'timestamp', 1: 'price'}, inplace=True)
@@ -206,7 +204,9 @@ def create_current():
         # Save data to database if table exists, otherwise create table
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
+
         save_table(db_url, table_name, df)
+
         end_time = datetime.now()
         logger.info(f"Total time: {end_time - start_time}")
         
