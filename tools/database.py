@@ -7,8 +7,11 @@ import io
 
 
 def table_exists(db_url, table_name):
-    engine = create_engine(db_url)
-    return engine.dialect.has_table(engine.connect(), table_name)
+    try:
+        engine = create_engine(db_url)
+        return engine.dialect.has_table(engine.connect(), table_name)
+    except:
+        return False
 
 def map_dtype(dtype):
     try:
@@ -61,7 +64,7 @@ def create_table_from_df(engine, table_name, df):
         
         table = Table(table_name, meta, *columns)
         table.create(engine)
-        print(f"Successfully created table {table_name}")
+        print(f"Successfully created table info for {table_name}")
         
     except sqla_exc.SQLAlchemyError as e:
         print(f"SQLAlchemy error occurred: {e}")
@@ -98,7 +101,6 @@ def save_table(db_url, table_name, df):
             print(f"Successfully saved {len(df)} rows to {table_name}")
         finally:
             raw_conn.close()
-            print(f"Successfully closed connection to {table_name}")
 
     except sqla_exc.SQLAlchemyError as e:
         print(f"SQLAlchemy error occurred: {e}")
@@ -135,8 +137,10 @@ def update_table(db_url, table_name,df):
 
         if existing_df is not None:
             existing_df = existing_df[existing_df.columns]
-            df = df[~df.isin(existing_df)].dropna()
-            if len(df) == 0:
+            #filter out rows in df that are already in existing_df
+            try:
+                df = df[~df.isin(existing_df.to_dict('list')).all(1)]
+            except:
                 print(f"No new rows to update in {table_name}")
                 return None
             else:
@@ -188,7 +192,6 @@ def remove_duplicates(db_url, table_name, duplicate_columns=None, order_column=N
             df = df.sort_values(by=[order_column], ascending=False)
 
             df = df.drop_duplicates(subset=duplicate_columns, keep='first')
-            
             
             # drop table
             table.drop(engine)

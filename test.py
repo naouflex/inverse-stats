@@ -1,9 +1,14 @@
 import traceback
-from defillama_prices import create_current,create_history
+import os 
+from dotenv import load_dotenv
+from defillama_prices import create_history
+load_dotenv()
 
 try:
-    #create_current()
-    create_history()
+    db_url = os.getenv('PROD_DB')
+    table_name = 'defillama_prices'
+    
+    create_history(db_url,table_name)
 
 except Exception as e:
     print(traceback.format_exc())

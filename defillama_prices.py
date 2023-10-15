@@ -6,10 +6,14 @@ from concurrent.futures import ThreadPoolExecutor
 from tools.database import save_table, get_table, update_table,remove_duplicates,drop_table,table_exists
 from dotenv import load_dotenv
 import os
+import threading
 import logging
 
 logger = logging.getLogger(__name__)
+
 MAX_THREADS = 10 
+
+lock = threading.Lock()
 
 load_dotenv()
 
@@ -40,17 +44,20 @@ def fetch_and_update_data(token_info, data):
         end_timestamp = int(datetime.utcnow().replace(hour=0, minute=0, second=0).timestamp())
         
         # We use days_since_start + 1 because we want to include both the start date and the end date
-        days_since_start = int(( datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days) + 2
+        days_since_start = int(( datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days) + 1
+
         
         # Update token_info with the correct range
         token_info.update({'timestamp': start_timestamp, 'days': days_since_start})
 
         chart_data = fetch_chart_data(chain_slug, contract_address, start_timestamp, days_since_start)
-        data['coins'].update(chart_data['coins'])
+
+        with lock:
+            data['coins'][f"{chain_slug}:{contract_address}"] = chart_data['coins'][f"{chain_slug}:{contract_address}"]
 
     except Exception as e:
         print(f"Error in fetch_and_update_data for {token_info} : {traceback.print_exc()}")
-        print("Please check if the token is still valid on defillama")
+        print(f"Please check if the token is still valid on defillama : {e}")
         pass
 
 def fetch_current_prices_from_tokens(token_address_list):
@@ -78,13 +85,9 @@ def fetch_and_save_current_data(token_info, data):
     except Exception as e:
         print(traceback.print_exc())
 
-def create_history():
+def create_history(db_url, table_name):
     try:
         start_time = datetime.now()
-
-        db_url = os.getenv('PROD_DB')
-        table_name = 'defillama_prices'
-
     
         # Fetch token address list
         url = "https://app.inverse.watch/api/queries/480/results.json?api_key=JY9REfUM3L7Ietj76qmQ2wFioz7k6GdCL6YqRxHG"
@@ -151,11 +154,9 @@ def create_history():
         logger.error(f"Error in creating historical price table : {traceback.print_exc()}")
         pass
 
-def create_current():
+def create_current(db_url, table_name):
     try:
         start_time = datetime.now()
-        db_url = os.getenv('PROD_DB')
-        table_name = 'defillama_prices_current'
 
         # Fetch token address list
         url = "https://app.inverse.watch/api/queries/480/results.json?api_key=JY9REfUM3L7Ietj76qmQ2wFioz7k6GdCL6YqRxHG"

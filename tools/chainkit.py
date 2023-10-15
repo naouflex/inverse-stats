@@ -46,7 +46,7 @@ def find_block_for_date(w3,current_date, df_list):
         block_after_midnight = int(block_after_midnight)
     
     df_list.append({
-        'date': midnight_timestamp,
+        'timestamp': midnight_timestamp,
         'block_number': block_after_midnight
     })
 

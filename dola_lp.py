@@ -72,7 +72,7 @@ def evaluate_operand(operand, w3, abi, prices, block_identifier, timestamp):
 
             if len(argument) ==42:
                 argument = w3.toChecksumAddress(argument)
-            #print(f"Evaluating operand: {operand} with contract: {contract}, method: {method}, argument: {argument}, index1: {index1}, index2: {index2}")
+
             try:
                 contract = w3.eth.contract(address=Web3.toChecksumAddress(contract), abi=abi)
                 method = getattr(contract.functions, method)
@@ -150,6 +150,7 @@ def apply_operator(operator, operand1, operand2):
 def precedence(operator):
     return {'+': 1, '-': 1, '*': 2, '/': 2}.get(operator, 0)
 
+# Convert infix to postfix using Shunting Yard Algorithm
 def shunting_yard_infix_to_postfix(parts):
     output = []
     operators = []
@@ -165,6 +166,7 @@ def shunting_yard_infix_to_postfix(parts):
 
     return output
 
+# Evaluate postfix expression
 def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp):
     stack = []
     for element in postfix:
@@ -176,6 +178,7 @@ def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp)
             stack.append(evaluate_operand(element, w3,abi, prices, block_identifier, block_timestamp))
     return stack[0]
 
+# Evaluate formula
 def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp):
     if string is None or pd.isnull(string) or string == '':
         return None
@@ -202,12 +205,11 @@ def process_row(row, prices, blocks,data):
         #filter out blocks lower than row['start_block'] and NaN or None values
         blocks = blocks[blocks[row['chain_name_y']] >= row['start_block']]
         blocks = blocks[blocks[row['chain_name_y']].notnull()]
-        
-        print(f"Processing row {row['Name']} with {len(blocks)} blocks")
 
         for i in range(len(blocks)):
-            block_timestamp = blocks.iloc[i]['date']
+            block_timestamp = blocks.iloc[i]['timestamp']
             block_identifier = blocks.iloc[i][row['chain_name_y']]
+            today_timestamp_at_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 
             # if None or block_identifier < row['start_block'] or Nan
             if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
@@ -230,8 +232,10 @@ def process_row(row, prices, blocks,data):
                     'chain_name_x':row['chain_name_x'],
                     'protocol':row['protocol'],
                     'account':row['account'],
+                    'type':row['type'],
                     'name':row['Name'],
                     'contract_address':row['contract_address'],
+                    'fed_adress':row['fed_address'],
                     'formula_asset':formulae_asset,
                     'formula_liability':formulae_liability
                 }
@@ -259,7 +263,7 @@ def create_history(db_url,table_name):
         for i in range(len(full_methodology)):
             row = full_methodology.iloc[i]
             # subset blocks on date and row['chain_name_y']
-            blocks_row = blocks[['date',row['chain_name_y']]]
+            blocks_row = blocks[['timestamp',row['chain_name_y']]]
             row_list.append((row,prices, blocks_row, data))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
@@ -276,8 +280,10 @@ def create_history(db_url,table_name):
             'chain_name_x': 'string',
             'protocol': 'string',
             'account': 'string',
+            'type': 'string',
             'name': 'string',
             'contract_address': 'string',
+            'fed_address': 'string',
             'formula_asset': 'float64',
             'formula_liability': 'float64'
         }.items() if k in data.columns}
@@ -291,12 +297,150 @@ def create_history(db_url,table_name):
         print(traceback.format_exc())
         print(f"Total execution time: {datetime.now() - start_time}")
 
-def create_current():
+def update_history(db_url,table_name):
+    try:
+        start_time = datetime.now()
+        full_methodology = build_methodology_table()
+
+        current_data = get_table(db_url,table_name)
+        print(f"Current data : {(current_data)}")
+
+        # get latest timestamp and block_number for each contract in the db
+        latest_block = current_data.groupby(['contract_address']).agg({'timestamp': 'max', 'block_number': 'max'}).reset_index()
+
+        blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
+        prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
+        
+        data = []
+        row_list = []
+
+        for i in range(len(full_methodology)):
+            row = full_methodology.iloc[i]
+            blocks_row = blocks[['timestamp', row['chain_name_y']]]
+            row_latest_block = latest_block[latest_block['contract_address'] == row['contract_address']]['block_number'].iloc[0]
+            
+            row_latest_timestamp = latest_block[latest_block['contract_address'] == row['contract_address']]['timestamp'].iloc[0]
+            today_timestamp = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+            blocks_row = blocks_row[blocks_row[row['chain_name_y']] > row_latest_block]
+
+            if blocks_row.empty:
+                print(f"Skipping row {row['Name']} because it was already updated.")
+                continue
+            
+            print(f"Row {row['Name']} latest timestamp: {row_latest_timestamp}, today timestamp: {today_timestamp}, blocks to scan: {blocks_row}")
+
+            row_list.append((row,prices, blocks_row, data))
+
+        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+            for row_data in row_list:
+                executor.submit(process_row, *row_data)
+
+        data = pd.DataFrame(data)
+
+        print(data)
+
+        # Filter out any keys not in DataFrame columns
+        valid_keys = {k: v for k, v in {
+            'timestamp': 'Int64', 
+            'block_number': 'Int64',
+            'chain_id': 'Int64',
+            'chain_name_x': 'string',
+            'protocol': 'string',
+            'account': 'string',
+            'type': 'string',
+            'name': 'string',
+            'contract_address': 'string',
+            'formula_asset': 'float64',
+            'formula_liability': 'float64'
+        }.items() if k in data.columns}
+
+        data = data.astype(valid_keys)
+
+        update_table(db_url,table_name,data)
+
+        print(f"Total execution time: {datetime.now() - start_time}")
+        
+    except Exception as e:
+        print(traceback.format_exc())
+        print(f"Total execution time: {datetime.now() - start_time}")
+
+def create_current(db_url,table_name):
+    # save as above but only for the last_block_number
+    try:
+        start_time = datetime.now()
+        full_methodology = build_methodology_table()
+
+        blocks = get_table(os.getenv('PROD_DB'), 'blocks_current')
+        prices = get_table(os.getenv('PROD_DB'), 'defillama_prices_current')
+        
+        data = []
+        row_list = []
+
+        for i in range(len(full_methodology)):
+            row = full_methodology.iloc[i]
+            
+            blocks_row = blocks[blocks['chain_name'] == row['chain_name_y']]
+            #reshape with timestamp: date and chain_name_y: block_number
+            blocks_row = blocks_row.rename(columns={'block_number': row['chain_name_y']})
+            blocks_row = blocks_row.drop_duplicates(subset=['timestamp', row['chain_name_x']], keep='last')
+            
+            # Update blocks_row so we can access bloxks_row['timestamp'] and blocks_row[row['chain_name_y']]
+            blocks_row = blocks_row.set_index('timestamp')
+            blocks_row = blocks_row[[row['chain_name_y']]]
+            
+            blocks_row = blocks_row.reset_index()
+            blocks_row['timestamp'] = start_time.timestamp()
+            # make sure the timestamp is an int
+            blocks_row['timestamp'] = blocks_row['timestamp'].astype(int)
+
+            row_list.append((row,prices, blocks_row, data))
+
+        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+            for row_data in row_list:
+                executor.submit(process_row, *row_data)
+
+        data = pd.DataFrame(data)
+
+        for col in data.columns:
+            if data[col].isnull().any():
+                print(f"Column {col} has NaN values.")
+            if data[col].dtype == 'float64':
+                non_integers = data[col][~data[col].apply(lambda x: x.is_integer())]
+                if not non_integers.empty:
+                    print(f"Column {col} has non-integer float numbers: {non_integers}")
+
+
+        data['timestamp'] = data['timestamp'].round(0).astype('Int64')
+
+
+        valid_keys = {k: v for k, v in {
+            'timestamp': 'Int64', 
+            'block_number': 'Int64',
+            'chain_id': 'Int64',
+            'chain_name_x': 'string',
+            'protocol': 'string',
+            'account': 'string',
+            'type': 'string',
+            'name': 'string',
+            'contract_address': 'string',
+            'formula_asset': 'float64',
+            'formula_liability': 'float64'
+        }.items() if k in data.columns}
+
+        for col, new_type in valid_keys.items():
+            try:
+                data[col] = data[col].astype(new_type)
+            except TypeError:
+                print(f"Failed to cast column {col} to {new_type}")
+
+        if table_exists(db_url, table_name):
+            drop_table(db_url, table_name)
+        save_table(db_url,table_name,data)
+
+        print(f"Total execution time: {datetime.now() - start_time}")
+        
+    except Exception as e:
+        print(traceback.format_exc())
+        print(f"Total execution time: {datetime.now() - start_time}")
     return
-
-
-db_url = os.getenv('PROD_DB')
-table_name = 'dola_lp'
-
-#create_history(db_url,table_name)
-remove_duplicates(db_url,table_name)
