@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from tools.database import drop_table, save_table, get_table, table_exists,update_table,remove_duplicates,create_table_from_df
+from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table,remove_duplicates,create_table_from_df
 from dotenv import load_dotenv
 import logging
 import re
