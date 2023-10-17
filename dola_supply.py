@@ -21,7 +21,7 @@ load_dotenv()
 
 def build_methodology_table():
     try:
-        methodology = requests.get("https://app.inverse.watch/api/queries/479/results.json?api_key=zCljA8HpUclyQQ4xHH3mpIaCBhjtjf2ljTd77Y9V").json()
+        methodology = requests.get("https://app.inverse.watch/api/queries/492/results.json?api_key=8eH4yNtb6tYYbTWHskb5a4MrLbeccV93NdbFcg64").json()
         web3_providers = requests.get(os.getenv("WEB3_PROVIDERS")).json()
         smart_contracts = requests.get("https://app.inverse.watch/api/queries/454/results.json?api_key=CNsPQor5gykZdi7jS746PngKK5M8KGeZsGvOZZPf").json()
 
@@ -46,7 +46,7 @@ def build_methodology_table():
         traceback.print_exc()
         return None
 
-def evaluate_operand(operand, w3, abi, prices, block_identifier, timestamp):
+def evaluate_operand(operand, w3, abi, block_identifier, timestamp):
     try:
         
         if operand is None or pd.isnull(operand) or operand == '':
@@ -76,8 +76,10 @@ def evaluate_operand(operand, w3, abi, prices, block_identifier, timestamp):
             try:
                 contract = w3.eth.contract(address=Web3.toChecksumAddress(contract), abi=abi)
                 method = getattr(contract.functions, method)
-                if argument is not None:
+                if argument is not None and argument != '':
                     method = method(argument)
+                else:
+                    method = method()
                 result = method.call(block_identifier=int(block_identifier))
                 
                 if index1 is not None:
@@ -90,31 +92,6 @@ def evaluate_operand(operand, w3, abi, prices, block_identifier, timestamp):
                 print(f"Error in evaluating method: {operand} : {e}")
                 return 0
             
-        elif operand[0] == '%':
-            try:
-                chain_slug, contract_address = operand[1:].split(':')
-                
-                filtered_prices = prices[
-                    (prices['chain'] == chain_slug) &
-                    (prices['token_address'].str.lower() == contract_address.lower()) &
-                    (prices['timestamp'] <= int(timestamp))
-                ]
-
-                # Check if the DataFrame is empty
-                if filtered_prices.empty:
-                    raise ValueError(f"Price cannot be found for %s:%s" % (chain_slug, contract_address))
-                else:
-                    # Sort by timestamp to make sure the latest price is at the end
-                    sorted_prices = filtered_prices.sort_values(by='timestamp')
-                    price = sorted_prices.iloc[-1]['price']
-
-                if price is not None:
-                    decimals = int(prices[(prices['chain'] == chain_slug) & (prices['token_address'].str.lower() == contract_address.lower())]['decimals'].iloc[0])
-                    price = Decimal(price) / Decimal(10 ** int(decimals))
-                return price or 0
-            except Exception as e:
-                print(f"Price cannot be found for {operand} at timestamp {timestamp}")
-                return 0
         else:
             return float(operand)
 
@@ -169,7 +146,7 @@ def shunting_yard_infix_to_postfix(parts):
     return output
 
 # Evaluate postfix expression
-def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp):
+def evaluate_postfix(postfix, w3,abi, block_identifier, block_timestamp):
     stack = []
     for element in postfix:
         if element in ['+', '-', '*', '/']:
@@ -177,11 +154,11 @@ def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp)
             operand1 = stack.pop()
             stack.append(apply_operator(element, operand1, operand2))
         else:
-            stack.append(evaluate_operand(element, w3,abi, prices, block_identifier, block_timestamp))
+            stack.append(evaluate_operand(element, w3,abi, block_identifier, block_timestamp))
     return stack[0]
 
 # Evaluate formula
-def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp):
+def evaluate_formula(string,w3,abi,block_identifier,block_timestamp):
     if string is None or pd.isnull(string) or string == '':
         return None
     
@@ -193,9 +170,9 @@ def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp):
     postfix = shunting_yard_infix_to_postfix(parts)
     
     # Evaluate the postfix expression
-    return evaluate_postfix(postfix, w3, abi,prices, block_identifier, block_timestamp)
+    return evaluate_postfix(postfix, w3, abi, block_identifier, block_timestamp)
 
-def process_row(row, prices, blocks,data):
+def process_row(row, blocks,data):
     try:
         #blocks_row is a pd series
         contract_start_time = datetime.now()
@@ -216,16 +193,12 @@ def process_row(row, prices, blocks,data):
             # if None or block_identifier < row['start_block'] or Nan
             if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
                 continue
+
             try :
-                formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp)
+                formula = evaluate_formula(row['formula'],w3,row['abi'],block_identifier,block_timestamp)
             except Exception as e:
-                formulae_asset = 'Error'
-                print(f"Error in evaluating formulae_asset : {e} : {traceback.format_exc()}")
-            try:
-                formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp)
-            except Exception as e:
-                formulae_liability = 'Error'
-                print(f"Error in evaluating formulae_liability : {e} : {traceback.format_exc()}")
+                formula = 'Error'
+                print(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
             
             temp_data = {
                     'timestamp':block_timestamp,
@@ -237,9 +210,7 @@ def process_row(row, prices, blocks,data):
                     'type':row['type'],
                     'name':row['Name'],
                     'contract_address':row['contract_address'],
-                    'fed_adress':row['fed_address'],
-                    'formula_asset':formulae_asset,
-                    'formula_liability':formulae_liability
+                    'formula':formula
                 }
 
             with lock:
@@ -248,7 +219,7 @@ def process_row(row, prices, blocks,data):
         print(f"Processed row {row['Name']} in {datetime.now() - contract_start_time}")
 
     except Exception as e:
-        print(f"Error in processing row : {e} : {traceback.format_exc()} results : {formulae_asset} : {formulae_liability}")
+        print(f"Error in processing row : {e} : {traceback.format_exc()} results : {formula}")
         pass
 
 def create_history(db_url,table_name):
@@ -257,7 +228,6 @@ def create_history(db_url,table_name):
         full_methodology = build_methodology_table()
 
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
-        prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
         
         data = []
         row_list = []
@@ -266,7 +236,7 @@ def create_history(db_url,table_name):
             row = full_methodology.iloc[i]
             # subset blocks on date and row['chain_name_y']
             blocks_row = blocks[['timestamp',row['chain_name_y']]]
-            row_list.append((row,prices, blocks_row, data))
+            row_list.append((row, blocks_row, data))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
@@ -285,9 +255,7 @@ def create_history(db_url,table_name):
             'type': 'string',
             'name': 'string',
             'contract_address': 'string',
-            'fed_address': 'string',
-            'formula_asset': 'float64',
-            'formula_liability': 'float64'
+            'formula': 'float64',
         }.items() if k in data.columns}
 
         data = data.astype(valid_keys)
@@ -311,7 +279,6 @@ def update_history(db_url,table_name):
         latest_blocks = current_data.groupby(['contract_address']).agg({'timestamp': 'max', 'block_number': 'max'}).reset_index()
 
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
-        prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
         
         data = []
         row_list = []
@@ -340,7 +307,7 @@ def update_history(db_url,table_name):
                 print(f"Row {row['Name']} was not found in the current data, updating from scratch.")
 
 
-            row_list.append((row,prices, blocks_to_read, data))
+            row_list.append((row, blocks_to_read, data))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
@@ -362,8 +329,7 @@ def update_history(db_url,table_name):
             'type': 'string',
             'name': 'string',
             'contract_address': 'string',
-            'formula_asset': 'float64',
-            'formula_liability': 'float64'
+            'formula': 'float64'
         }.items() if k in data.columns}
 
         data = data.astype(valid_keys)
@@ -384,7 +350,6 @@ def create_current(db_url,table_name):
         full_methodology = build_methodology_table()
 
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_current')
-        prices = get_table(os.getenv('PROD_DB'), 'defillama_prices_current')
         
         data = []
         row_list = []
@@ -406,7 +371,7 @@ def create_current(db_url,table_name):
             # make sure the timestamp is an int
             blocks_row['timestamp'] = blocks_row['timestamp'].astype(int)
 
-            row_list.append((row,prices, blocks_row, data))
+            row_list.append((row, blocks_row, data))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
@@ -434,8 +399,7 @@ def create_current(db_url,table_name):
             'type': 'string',
             'name': 'string',
             'contract_address': 'string',
-            'formula_asset': 'float64',
-            'formula_liability': 'float64'
+            'formula': 'float64'
         }.items() if k in data.columns}
 
         for col, new_type in valid_keys.items():
