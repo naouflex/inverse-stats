@@ -94,7 +94,7 @@ def process_row(row, blocks,data):
                 continue
 
             try :
-                formula = evaluate_formula(row['formula'],w3,row['abi'],block_identifier,block_timestamp)
+                formula = evaluate_formula(row['formula'],w3,row['abi'],None,block_identifier,block_timestamp)
             except Exception as e:
                 formula = 'Error'
                 print(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
@@ -258,16 +258,15 @@ def create_current(db_url,table_name):
                     print(f"Column {col} has non-integer float numbers: {non_integers}")
 
         data['timestamp'] = data['timestamp'].astype('Int64')
-
+        print(data)
         validate_keys(data)
 
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
+
         save_table(db_url,table_name,data)
 
         print(f"Total execution time: {datetime.now() - start_time}")
         
     except Exception as e:
         print(traceback.format_exc())
-        print(f"Total execution time: {datetime.now() - start_time}")
-    return

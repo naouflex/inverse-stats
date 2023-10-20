@@ -130,7 +130,7 @@ def shunting_yard_infix_to_postfix(parts):
     return output
 
 # Evaluate postfix expression
-def evaluate_postfix(postfix, w3,abi, block_identifier, block_timestamp):
+def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp):
     stack = []
     for element in postfix:
         if element in ['+', '-', '*', '/']:
@@ -138,11 +138,11 @@ def evaluate_postfix(postfix, w3,abi, block_identifier, block_timestamp):
             operand1 = stack.pop()
             stack.append(apply_operator(element, operand1, operand2))
         else:
-            stack.append(evaluate_operand(element, w3,abi, block_identifier, block_timestamp))
+            stack.append(evaluate_operand(element, w3,abi, prices, block_identifier, block_timestamp))
     return stack[0]
 
 # Evaluate formula
-def evaluate_formula(string,w3,abi,block_identifier,block_timestamp):
+def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp):
     if string is None or pd.isnull(string) or string == '':
         return None
     
@@ -154,4 +154,4 @@ def evaluate_formula(string,w3,abi,block_identifier,block_timestamp):
     postfix = shunting_yard_infix_to_postfix(parts)
     
     # Evaluate the postfix expression
-    return evaluate_postfix(postfix, w3, abi, block_identifier, block_timestamp)
+    return evaluate_postfix(postfix, w3, abi,prices, block_identifier, block_timestamp)

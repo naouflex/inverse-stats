@@ -2,17 +2,16 @@ import threading
 import requests
 import pandas as pd
 import traceback
-import logging
 import os
-
 from datetime import datetime
+from decimal import Decimal
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor
-
 from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table
-from scripts.tools.formulae import evaluate_formula
+from dotenv import load_dotenv
+import logging
+import re
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 MAX_THREADS = 1
@@ -46,6 +45,7 @@ def build_methodology_table():
         print(f"Error in getting methodology : {e}")
         traceback.print_exc()
         return None
+
 
 def validate_keys(data):
         valid_keys = {k: v for k, v in {
