@@ -2,6 +2,8 @@ import re
 import pandas as pd
 from web3 import Web3
 import traceback
+from decimal import Decimal
+
 
 
 def evaluate_operand(operand, w3, abi,prices, block_identifier, timestamp):
