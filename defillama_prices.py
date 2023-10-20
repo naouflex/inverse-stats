@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
-from tools.database import save_table, get_table, update_table,remove_duplicates,drop_table,table_exists
+from scripts.tools.database import save_table, get_table, update_table,remove_duplicates,drop_table,table_exists
 from dotenv import load_dotenv
 import os
 import threading
@@ -18,51 +18,48 @@ lock = threading.Lock()
 load_dotenv()
 
 def fetch_json(url):
-    return requests.get(url).json()
+        return requests.get(url).json()
 
 def fetch_token_data(chain_slug, contract_address):
     url = f"https://coins.llama.fi/prices/first/{chain_slug}:{contract_address}"
     return fetch_json(url)
 
-def fetch_chart_data(chain_slug, contract_address, start_timestamp, days):
-    url = f"https://coins.llama.fi/chart/{chain_slug}:{contract_address}?start={start_timestamp}&span={days}&period=1d"
+def fetch_chart_data(chain_slug, contract_address, end_timestamp, days):
+    url = f"https://coins.llama.fi/chart/{chain_slug}:{contract_address}?end={end_timestamp}&span={days}&period=1d"
     return fetch_json(url)
 
 def fetch_and_update_data(token_info, data):
     try:
         chain_slug, contract_address = token_info['chain_slug'], token_info['contract_address']
-
-        # Determine the start_timestamp based on the token_info or fetch from the API
         start_timestamp = token_info.get('timestamp')
 
         if not start_timestamp:
             token_data = fetch_token_data(chain_slug, contract_address)
             start_timestamp = int(token_data["coins"][f"{chain_slug}:{contract_address}"]['timestamp'])
 
-        #set hour , minute and second to 0 and make sure this is utc
         start_timestamp = int(datetime.utcfromtimestamp(start_timestamp).replace(hour=0, minute=0, second=0).timestamp())
-        end_timestamp = int(datetime.utcnow().replace(hour=0, minute=0, second=0).timestamp())
-        
-        # We use days_since_start + 1 because we want to include both the start date and the end date
+        end_timestamp = int(datetime.utcnow().replace(hour=0, minute=0, second=0).timestamp()) + 2*86400
+    
         days_since_start = int(( datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days) + 1
 
-        
-        # Update token_info with the correct range
         token_info.update({'timestamp': start_timestamp, 'days': days_since_start})
 
-        chart_data = fetch_chart_data(chain_slug, contract_address, start_timestamp, days_since_start)
+        chart_data = fetch_chart_data(chain_slug, contract_address, end_timestamp, days_since_start)
 
         with lock:
             data['coins'][f"{chain_slug}:{contract_address}"] = chart_data['coins'][f"{chain_slug}:{contract_address}"]
+            print(f"Processed {chain_slug}:{contract_address} from {datetime.utcfromtimestamp(start_timestamp)} to {datetime.utcfromtimestamp(end_timestamp)}")
+ 
 
     except Exception as e:
-        print(f"Error in fetch_and_update_data for {token_info} : {traceback.print_exc()}")
-        print(f"Please check if the token is still valid on defillama : {e}")
+        print(f"Could not fetch data for {chain_slug}:{contract_address} : {traceback.print_exc()}")
+        if contract_address in ('0x0000000000000000000000000000000000000000','0x27b5739e22ad9033bcbf192059122d163b60349d'):
+                print(chart_data)
         pass
 
 def fetch_current_prices_from_tokens(token_address_list):
     tokens = ','.join([f"{info['chain_slug']}:{info['contract_address']}" for info in token_address_list])
-    url = f"https://coins.llama.fi/prices/current/{tokens}?searchWidth=4h"
+    url = f"https://coins.llama.fi/prices/current/{tokens}?searchWidth=24h"
     
     return fetch_json(url)
 
@@ -89,13 +86,11 @@ def create_history(db_url, table_name):
     try:
         start_time = datetime.now()
     
-        # Fetch token address list
         url = "https://app.inverse.watch/api/queries/480/results.json?api_key=JY9REfUM3L7Ietj76qmQ2wFioz7k6GdCL6YqRxHG"
         token_address_list = fetch_json(url)["query_result"]["data"]["rows"]
 
         data = {"coins": {}}
 
-        # Using ThreadPoolExecutor to fetch data concurrently
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for token_info in token_address_list:
                 executor.submit(fetch_and_update_data, token_info, data)
@@ -116,13 +111,13 @@ def create_history(db_url, table_name):
 
         # Convert timestamp column to datetime object
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-
-        # Round datetime to midnight
         df['timestamp'] = df['timestamp'].dt.normalize()
+        df['timestamp'] = df['timestamp'].view('int64') // 10 ** 9
 
-        # Convert datetime back to Unix timestamp
-        df['timestamp'] = df['timestamp'].astype(int) // 10 ** 9
+        # rename 0 and 1 to timestamp and price
+        df.rename(columns={0: 'timestamp', 1: 'price'}, inplace=True)
 
+        # Add last_updated column
         df['last_updated'] = datetime.now()
 
         # Filter out any keys not in DataFrame columns

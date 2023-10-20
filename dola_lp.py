@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table,remove_duplicates,create_table_from_df
+from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table
 from dotenv import load_dotenv
 import logging
 import re
@@ -195,6 +195,32 @@ def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp):
     # Evaluate the postfix expression
     return evaluate_postfix(postfix, w3, abi,prices, block_identifier, block_timestamp)
 
+def validate_keys(data):
+        valid_keys = {k: v for k, v in {
+            'timestamp': 'Int64', 
+            'block_number': 'Int64',
+            'account_id': 'Int64',
+            'chain_id': 'Int64',
+            'chain_name_x': 'string',
+            'contract_address': 'string',
+            'protocol': 'string',
+            'contract_name': 'string',
+            'account_type': 'string',
+            'collateral_type': 'string',
+            'lp_type': 'string',
+            'fed_address': 'string',
+            'formula_asset': 'float64',
+            'formula_liability': 'float64'
+        }.items() if k in data.columns}
+
+        for col, new_type in valid_keys.items():
+            try:
+                data[col] = data[col].astype(new_type)
+            except TypeError:
+                print(f"Failed to cast column {col} to {new_type}")
+                pass
+        return
+
 def process_row(row, prices, blocks,data):
     try:
         #blocks_row is a pd series
@@ -230,13 +256,15 @@ def process_row(row, prices, blocks,data):
             temp_data = {
                     'timestamp':block_timestamp,
                     'block_number':block_identifier,
+                    'account_id':row['account_id'],
                     'chain_id':row['chain_id_x'],
                     'chain_name_x':row['chain_name_x'],
-                    'protocol':row['protocol'],
-                    'account':row['account'],
-                    'type':row['type'],
-                    'name':row['Name'],
                     'contract_address':row['contract_address'],
+                    'protocol':row['protocol'],
+                    'contract_name':row['contract_name'],
+                    'account_type':row['account_type'],
+                    'collateral_type':row['collateral_type'],
+                    'lp_type':row['lp_type'],
                     'fed_adress':row['fed_address'],
                     'formula_asset':formulae_asset,
                     'formula_liability':formulae_liability
@@ -275,22 +303,8 @@ def create_history(db_url,table_name):
         data = pd.DataFrame(data)
 
         # Filter out any keys not in DataFrame columns
-        valid_keys = {k: v for k, v in {
-            'timestamp': 'Int64', 
-            'block_number': 'Int64',
-            'chain_id': 'Int64',
-            'chain_name_x': 'string',
-            'protocol': 'string',
-            'account': 'string',
-            'type': 'string',
-            'name': 'string',
-            'contract_address': 'string',
-            'fed_address': 'string',
-            'formula_asset': 'float64',
-            'formula_liability': 'float64'
-        }.items() if k in data.columns}
+        validate_keys(data)
 
-        data = data.astype(valid_keys)
         save_table(db_url,table_name,data)
 
         print(f"Total execution time: {datetime.now() - start_time}")
@@ -345,29 +359,10 @@ def update_history(db_url,table_name):
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
                 executor.submit(process_row, *row_data)
-                print(0)
 
         data = pd.DataFrame(data)
 
-        print(data)
-
-        # Filter out any keys not in DataFrame columns
-        valid_keys = {k: v for k, v in {
-            'timestamp': 'Int64', 
-            'block_number': 'Int64',
-            'chain_id': 'Int64',
-            'chain_name_x': 'string',
-            'protocol': 'string',
-            'account': 'string',
-            'type': 'string',
-            'name': 'string',
-            'contract_address': 'string',
-            'formula_asset': 'float64',
-            'formula_liability': 'float64'
-        }.items() if k in data.columns}
-
-        data = data.astype(valid_keys)
-
+        validate_keys(data)
         update_table(db_url,table_name,data)
 
         print(f"Total execution time: {datetime.now() - start_time}")
@@ -375,7 +370,6 @@ def update_history(db_url,table_name):
     except Exception as e:
         print(traceback.format_exc())
         print(row)
-        print(f"Total execution time: {datetime.now() - start_time}")
 
 def create_current(db_url,table_name):
     # save as above but only for the last_block_number
@@ -424,25 +418,7 @@ def create_current(db_url,table_name):
 
         data['timestamp'] = data['timestamp'].astype('Int64')
 
-        valid_keys = {k: v for k, v in {
-            'timestamp': 'Int64', 
-            'block_number': 'Int64',
-            'chain_id': 'Int64',
-            'chain_name_x': 'string',
-            'protocol': 'string',
-            'account': 'string',
-            'type': 'string',
-            'name': 'string',
-            'contract_address': 'string',
-            'formula_asset': 'float64',
-            'formula_liability': 'float64'
-        }.items() if k in data.columns}
-
-        for col, new_type in valid_keys.items():
-            try:
-                data[col] = data[col].astype(new_type)
-            except TypeError:
-                print(f"Failed to cast column {col} to {new_type}")
+        validate_keys(data)
 
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
@@ -452,5 +428,3 @@ def create_current(db_url,table_name):
         
     except Exception as e:
         print(traceback.format_exc())
-        print(f"Total execution time: {datetime.now() - start_time}")
-    return

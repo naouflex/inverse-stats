@@ -13,8 +13,11 @@ The functions are used to populate a postgresql DB in order to make the processi
 ### blocks_daily
 - script to constitute daily snapshot of the closest block to midnight
 
-### dola_health
-- script to aggregate data for dola health dashboard
+### dola_lp
+- script to aggregate data for dola liquidity providers
+
+### dola_supply
+- script to aggregate data for dola supply from Fed Contracts
 
 ### defillama_prices
 - script to get and update defi llama prices for a better availability/performance
