@@ -15,9 +15,8 @@ from scripts.tools.database import drop_table, save_table, get_table, table_exis
 from scripts.tools.formulae import evaluate_formula
 
 logger = logging.getLogger(__name__)
-MAX_THREADS = 10
-
 lock = threading.Lock()
+MAX_THREADS = 10
 load_dotenv()
 
 def build_methodology_table():
@@ -115,7 +114,7 @@ def process_row(row, prices, blocks,data):
                     'account_type':row['account_type'],
                     'contract_name':row['contract_name'],
                     'collateral_address':row['collateral_address'],
-                    'fed_adress':row['fed_address'],
+                    'fed_address':row['fed_address'],
                     'formula_asset':formulae_asset,
                     'formula_liability':formulae_liability
                 }

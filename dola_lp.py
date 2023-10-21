@@ -117,7 +117,7 @@ def process_row(row, prices, blocks,data):
                     'account_type':row['account_type'],
                     'collateral_type':row['collateral_type'],
                     'lp_type':row['lp_type'],
-                    'fed_adress':row['fed_address'],
+                    'fed_address':row['fed_address'],
                     'formula_asset':formulae_asset,
                     'formula_liability':formulae_liability
                 }
