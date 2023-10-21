@@ -1,21 +1,46 @@
-import traceback
-import requests
-import pandas as pd
-from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor
-from scripts.tools.database import save_table, get_table, update_table,remove_duplicates,drop_table,table_exists
-from dotenv import load_dotenv
+
 import os
 import threading
 import logging
+import traceback
+import requests
+import pandas as pd
+
+from dotenv import load_dotenv
+from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
+
+
+from scripts.tools.database import save_table, get_table, update_table,remove_duplicates,drop_table,table_exists
 
 logger = logging.getLogger(__name__)
 
 MAX_THREADS = 10 
-
 lock = threading.Lock()
 
 load_dotenv()
+
+def validate_keys(data):
+        valid_keys = {k: v for k, v in {
+            'timestamp': 'Int64',
+            'chain': 'string',
+            'chain_id': 'Int64',
+            'token_address': 'string',
+            'price': 'float64',
+            'confidence': 'float64',
+            'symbol': 'string',
+            'decimals': 'Int64',
+            'last_updated': 'datetime64[ns]'
+
+        }.items() if k in data.columns}
+
+        for col, new_type in valid_keys.items():
+            try:
+                data[col] = data[col].astype(new_type)
+            except TypeError:
+                print(f"Failed to cast column {col} to {new_type}")
+                pass
+        return
 
 def fetch_json(url):
         return requests.get(url).json()
@@ -120,25 +145,10 @@ def create_history(db_url, table_name):
         # Add last_updated column
         df['last_updated'] = datetime.now()
 
-        # Filter out any keys not in DataFrame columns
-        valid_keys = {k: v for k, v in {
-            'timestamp': 'Int64', 
-            'chain': 'string', 
-            'chain_id': 'Int64', 
-            'token_address': 'string',
-            'price': 'float64',
-            'confidence': 'float64',
-            'symbol': 'string',
-            'decimals': 'Int64',
-            'last_updated': 'datetime64[ns]'
-        }.items() if k in df.columns}
+        validate_keys(df)
         
-        # Make sure all columns are in the proper format
-        df = df.astype(valid_keys)
-
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
-        
         save_table(db_url, table_name, df)
 
         remove_duplicates(db_url, table_name, ['timestamp', 'chain_id', 'token_address'], 'last_updated')
@@ -181,23 +191,8 @@ def create_current(db_url, table_name):
 
         df['last_updated'] = datetime.now()
 
-        # Filter out any keys not in DataFrame columns
-        valid_keys = {k: v for k, v in {
-            'timestamp': 'Int64', 
-            'chain': 'string', 
-            'chain_id': 'Int64', 
-            'token_address': 'string',
-            'price': 'float64',
-            'confidence': 'float64',
-            'symbol': 'string',
-            'decimals': 'Int64',
-            'last_updated': 'datetime64[ns]'
-        }.items() if k in df.columns}
-        
-        # Make sure all columns are in the proper format
-        df = df.astype(valid_keys)
+        validate_keys(df)
 
-        # Save data to database if table exists, otherwise create table
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
 

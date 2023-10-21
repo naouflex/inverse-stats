@@ -1,16 +1,18 @@
 import traceback
 import requests
 import pandas as pd
+import logging
 import os
-from datetime import datetime, timedelta
+
 from web3 import Web3
+from datetime import datetime
+from dotenv import load_dotenv  
+from datetime import datetime, timedelta
 from web3.middleware import geth_poa_middleware
+
 from scripts.tools.chainkit import get_blocks_by_date_range
 from scripts.tools.database import save_table, get_table,update_table, table_exists, drop_table
 
-from datetime import datetime
-from dotenv import load_dotenv  
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +53,16 @@ def create_history(db_url,table_name,start_date,end_date=None):
             print(f"chain_id: {chain_id}, chain_name: {chain_name} processed")
 
         block_table = pd.DataFrame(block_table)
-        #print(block_table)
+
+        if table_exists(db_url, table_name):
+            print(f" Table already exists, changing new table name to {table_name}_new")
+            table_name = f"{table_name}_new"
+
         save_table(db_url,table_name,block_table)
+
         print(f"Create Block Table - Time elapsed: {datetime.now() - start_time}")
         return
+    
     except Exception as e:
         print(f"Cannot create block table: {e}")
         return
@@ -84,7 +92,6 @@ def update_history(db_url,table_name,end_date=None):
         if end_date is None:
             end_date = datetime.now().strftime("%Y-%m-%d 00:00:00")
         
-        
         web3_providers = get_rpc_table()
 
         for i in range(len(web3_providers)):
@@ -102,7 +109,9 @@ def update_history(db_url,table_name,end_date=None):
                 #rename block_number to chain_name_block_number and left merge to block_table
                 chain_blocks = chain_blocks.rename(columns={'block_number': chain_name})
                 block_table = pd.merge(block_table, chain_blocks, on='timestamp', how='left')
+
             print(f"chain_id: {chain_id}, chain_name: {chain_name} processed")
+
         block_table = pd.DataFrame(block_table)
         update_table(db_url,table_name,block_table)
         

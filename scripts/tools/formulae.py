@@ -1,7 +1,8 @@
 import re
 import pandas as pd
-from web3 import Web3
 import traceback
+
+from web3 import Web3
 from decimal import Decimal
 
 

@@ -1,11 +1,11 @@
 import traceback
 import os 
 from dotenv import load_dotenv
-from dola_supply import create_current, create_history, update_history
-
+from dola_lp import create_current, create_history, update_history
+# dola_lp dola_supply frontier
 try:
     db_url = os.getenv('PROD_DB')
-    table_name = 'dola_supply_current_2'
+    table_name = 'lp_current'
     
     create_current(db_url,table_name)
 

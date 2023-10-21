@@ -15,7 +15,7 @@ from scripts.tools.database import drop_table, save_table, get_table, table_exis
 from scripts.tools.formulae import evaluate_formula
 
 logger = logging.getLogger(__name__)
-MAX_THREADS = 1
+MAX_THREADS = 10
 
 lock = threading.Lock()
 load_dotenv()
@@ -89,21 +89,21 @@ def process_row(row, prices, blocks,data):
         for i in range(len(blocks)):
             block_timestamp = blocks.iloc[i]['timestamp']
             block_identifier = blocks.iloc[i][row['chain_name_y']]
-            today_timestamp_at_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 
-            # if None or block_identifier < row['start_block'] or Nan
             if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
                 continue
+
             try :
                 formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp)
             except Exception as e:
                 formulae_asset = 'Error'
-                print(f"Error in evaluating formulae_asset : {e} : {traceback.format_exc()}")
+                print(f"Error in evaluating formula_asset : {e} : {traceback.format_exc()}")
+
             try:
                 formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp)
             except Exception as e:
                 formulae_liability = 'Error'
-                print(f"Error in evaluating formulae_liability : {e} : {traceback.format_exc()}")
+                print(f"Error in evaluating formula_liability : {e} : {traceback.format_exc()}")
             
             temp_data = {
                     'timestamp':block_timestamp,
@@ -125,7 +125,7 @@ def process_row(row, prices, blocks,data):
             with lock:
                 data.append(temp_data)
                 
-        print(f"Processed row {row['Name']} in {datetime.now() - contract_start_time}")
+        print(f"Processed row {row['contract_name']} in {datetime.now() - contract_start_time}")
 
     except Exception as e:
         print(f"Error in processing row : {e} : {traceback.format_exc()} results : {formulae_asset} : {formulae_liability}")
@@ -197,13 +197,13 @@ def update_history(db_url,table_name):
                         print('It seems blocks daily table is out of sync, please update it before proceeding.')
                         return
                     elif row_latest_timestamp == today_timestamp:
-                        print(f"Skipping row {row['Name']} because it was already updated.")
+                        print(f"Skipping row {row['contract_name']} because it was already updated.")
                         continue
             
-                print(f"Updating Row {row['Name']} latest timestamp: {row_latest_timestamp}, today timestamp: {today_timestamp}, blocks to scan: {blocks_to_read}")
+                print(f"Updating Row {row['contract_name']} latest timestamp: {row_latest_timestamp}, today timestamp: {today_timestamp}, blocks to scan: {blocks_to_read}")
 
             else:
-                print(f"Row {row['Name']} was not found in the current data, updating from scratch.")
+                print(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
 
 
             row_list.append((row,prices, blocks_to_read, data))
@@ -259,14 +259,6 @@ def create_current(db_url,table_name):
                 executor.submit(process_row, *row_data)
 
         data = pd.DataFrame(data)
-
-        for col in data.columns:
-            if data[col].isnull().any():
-                print(f"Column {col} has NaN values.")
-            if data[col].dtype == 'float64':
-                non_integers = data[col][~data[col].apply(lambda x: x.is_integer())]
-                if not non_integers.empty:
-                    print(f"Column {col} has non-integer float numbers: {non_integers}")
 
         data['timestamp'] = data['timestamp'].astype('Int64')
 

@@ -15,7 +15,7 @@ from scripts.tools.database import drop_table, save_table, get_table, table_exis
 from scripts.tools.formulae import evaluate_formula
 
 logger = logging.getLogger(__name__)
-MAX_THREADS = 12
+MAX_THREADS = 10
 
 lock = threading.Lock()
 load_dotenv()
@@ -113,7 +113,6 @@ def process_row(row, prices, blocks,data):
                     'contract_address':row['contract_address'],
                     'protocol':row['protocol'],
                     'account_type':row['account_type'],
-                    'type':row['type'],
                     'contract_name':row['contract_name'],
                     'collateral_address':row['collateral_address'],
                     'fed_adress':row['fed_address'],
@@ -262,14 +261,6 @@ def create_current(db_url,table_name):
 
         data = pd.DataFrame(data)
 
-        for col in data.columns:
-            if data[col].isnull().any():
-                print(f"Column {col} has NaN values.")
-            if data[col].dtype == 'float64':
-                non_integers = data[col][~data[col].apply(lambda x: x.is_integer())]
-                if not non_integers.empty:
-                    print(f"Column {col} has non-integer float numbers: {non_integers}")
-
         data['timestamp'] = data['timestamp'].astype('Int64')
 
         validate_keys(data)
@@ -282,5 +273,3 @@ def create_current(db_url,table_name):
         
     except Exception as e:
         print(traceback.format_exc())
-        print(f"Total execution time: {datetime.now() - start_time}")
-    return

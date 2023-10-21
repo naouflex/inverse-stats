@@ -249,16 +249,8 @@ def create_current(db_url,table_name):
 
         data = pd.DataFrame(data)
 
-        for col in data.columns:
-            if data[col].isnull().any():
-                print(f"Column {col} has NaN values.")
-            if data[col].dtype == 'float64':
-                non_integers = data[col][~data[col].apply(lambda x: x.is_integer())]
-                if not non_integers.empty:
-                    print(f"Column {col} has non-integer float numbers: {non_integers}")
-
         data['timestamp'] = data['timestamp'].astype('Int64')
-        print(data)
+
         validate_keys(data)
 
         if table_exists(db_url, table_name):
