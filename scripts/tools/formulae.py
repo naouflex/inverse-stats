@@ -61,7 +61,7 @@ def evaluate_operand(operand, w3, abi,prices, block_identifier, timestamp):
                     (prices['chain'] == chain_slug) &
                     (prices['token_address'].str.lower() == contract_address.lower()) &
                     (prices['timestamp'] <= int(timestamp)) &
-                    (prices['timestamp'] >= int(timestamp) - 86400)
+                    (prices['timestamp'] >= int(timestamp) - 86400)*7
                 ]
 
                 # Check if the DataFrame is empty
