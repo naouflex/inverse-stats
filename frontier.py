@@ -204,7 +204,7 @@ def update_history(db_url,table_name):
                 print(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
 
 
-            row_list.append((row,prices, blocks_to_read, data))
+            row_list.append((row, prices, blocks_to_read, data))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:

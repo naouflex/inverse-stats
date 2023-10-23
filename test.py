@@ -5,14 +5,14 @@ from defillama_prices import create_current, create_history
 # dola_lp dola_supply frontier defillama_prices
 try:
     db_url = os.getenv('PROD_DB')
-    #table_name = 'dola_lp_current'
-    #table_name = 'dola_lp_history'
+    #table_name = 'lp_current'
+    #table_name = 'lp_history'
     #table_name = 'dola_supply_current'
     #table_name = 'dola_supply_history'
     #table_name = 'frontier_markets_current'
-    #table_name = 'frontier_markets_history'
-    #table_name = 'defillama_prices_current'
     table_name = 'defillama_prices'
+    #table_name = 'defillama_prices_current'
+    #table_name = 'defillama_prices'
 
     #table_name = 'dola_supply_current'
     #table_name = 'dola_supply_history'

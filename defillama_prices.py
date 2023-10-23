@@ -82,7 +82,14 @@ def fetch_and_update_data(token_info, data):
 
     except Exception as e:
         print(f"Error in fetch_and_update_data for {token_info} : {traceback.print_exc()}")
-        print(f"Please check if the token is still valid on defillama : {e}")
+        # trying to fetch with one day less
+        try:
+            days_since_start = days_since_start - 1
+            chart_data = fetch_chart_data(chain_slug, contract_address, start_timestamp, days_since_start)
+            with lock:
+                data['coins'][f"{chain_slug}:{contract_address}"] = chart_data['coins'][f"{chain_slug}:{contract_address}"]
+        except Exception as e:
+            print(f"Error in fetch_and_update_data for {token_info} : {traceback.print_exc()}")
         pass
 
 def fetch_current_prices_from_tokens(token_address_list):
