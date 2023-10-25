@@ -2,227 +2,67 @@ import pandas as pd
 import traceback
 import sqlalchemy.exc as sqla_exc
 import io
+from sqlalchemy import (MetaData, Column, Integer, String, Float, DateTime, 
+                        Table, select, create_engine)
+import logging
 
-from sqlalchemy import MetaData, Column, Integer, String, Float, DateTime, Table, select, create_engine, update
-
-
+logger = logging.getLogger(__name__)
 
 def table_exists(db_url, table_name):
-    try:
-        engine = create_engine(db_url)
-        return engine.dialect.has_table(engine.connect(), table_name)
-    except:
-        return False
+    engine = create_engine(db_url)
+    return engine.dialect.has_table(engine.connect(), table_name)
 
 def map_dtype(dtype):
-    try:
-        dtype_str = str(dtype)
-        
-        mapping = {
-            'O': String,
-            'object': String,
-            'string': String,
-            'int64': Integer,
-            'float64': Float,
-            'datetime64[ns]': DateTime,
-            'Int64': Integer,
-        }
-        
-        if dtype_str in mapping:
-            return mapping[dtype_str]
-        
-        # Check for more general cases
-        if "int" in dtype_str:
-            return Integer
-        elif "float" in dtype_str:
-            return Float
-        elif "datetime" in dtype_str:
-            return DateTime
-        elif "str" in dtype_str:
-            return String
-    
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
-        return 0
-
+    dtype_str = str(dtype)
+    mapping = {
+        'O': String,
+        'object': String,
+        'string': String,
+        'int64': Integer,
+        'float64': Float,
+        'datetime64[ns]': DateTime,
+        'Int64': Integer,
+    }
+    return mapping.get(dtype_str, String if "str" in dtype_str else Integer)
 
 def create_table_from_df(engine, table_name, df):
-    try:
-        meta = MetaData()
-        
-        columns = []
-        for col in df.columns:
-            dtype_mapped = map_dtype(df[col].dtype)
-            if dtype_mapped == 0:  # This means our mapping failed
-                print(f"Mapping failed for column '{col}' with dtype '{df[col].dtype}'.")
-                continue  # Skip adding this column
-            columns.append(Column(col, dtype_mapped))
-        
-        if not columns:  # If no columns are mapped correctly
-            print(f"No columns were successfully mapped for table '{table_name}'. Check your data.")
-            return
-        
-        table = Table(table_name, meta, *columns)
-        table.create(engine)
-        print(f"Successfully created table info for {table_name}")
-        
-    except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
-        
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
+    meta = MetaData()
+    columns = [Column(col, map_dtype(df[col].dtype)) for col in df.columns]
+    Table(table_name, meta, *columns).create(engine)
 
 def save_table(db_url, table_name, df):
     engine = create_engine(db_url)
-    df = pd.DataFrame(df)
-
-    try:
-        if not table_exists(db_url, table_name):
-            create_table_from_df(engine, table_name, df)
-
-        buffer = io.StringIO()
-        df.to_csv(buffer, index=False, header=False)
-        buffer.seek(0)
-        raw_conn = engine.raw_connection()
-
-        try:
-            # check that table exists and buffer is not empty
-            if not table_exists(db_url, table_name):
-                print(f"Table {table_name} does not exist")
-                return None
-            elif len(df) == 0:
-                print(f"No rows to save in {table_name}")
-                return None
-            with raw_conn.cursor() as cur:
-                cur.copy_from(buffer, table_name, sep=',', null='')
-            raw_conn.commit()
-            print(f"Successfully saved {len(df)} rows to {table_name}")
-        finally:
-            raw_conn.close()
-
-    except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
-
+    if not table_exists(db_url, table_name):
+        create_table_from_df(engine, table_name, df)
+    df.to_sql(table_name, engine, if_exists='append', index=False)
 
 def get_table(db_url, table_name):
-    engine = create_engine(db_url)
+    if table_exists(db_url, table_name):
+        return pd.read_sql_table(table_name, create_engine(db_url))
 
+def update_table(db_url, table_name, df):
+    engine = create_engine(db_url)
     if not table_exists(db_url, table_name):
-        print(f"Table {table_name} does not exist")
-        return None
-    else:
-        meta = MetaData()
-        table = Table(table_name, meta, autoload_with=engine)
-        stmt = select(table.c)  # Fix is here
-        with engine.connect() as conn:
-            results = conn.execute(stmt).fetchall()
-        df = pd.DataFrame(results, columns=table.columns.keys())
-        print(f"Successfully read {len(df)} rows from {table_name}")
-        return df
-
-def update_table(db_url, table_name,df):
-    engine = create_engine(db_url)
-    try:
-        if not table_exists(db_url, table_name):
-            print(f"Table {table_name} does not exist")
-            return None
-        df = df[df.columns] 
-        existing_df = get_table(db_url,table_name)
-
-        if existing_df is not None:
-            existing_df = existing_df[existing_df.columns]
-            #filter out rows in df that are already in existing_df
-            try:
-                df = df[~df.isin(existing_df.to_dict('list')).all(1)]
-            except:
-                print(f"No new rows to update in {table_name}")
-                return None
-            else:
-                buffer = io.StringIO()
-                df.to_csv(buffer, index=False, header=False)
-                buffer.seek(0)
-                raw_conn = engine.raw_connection()
-
-                try:
-                    with raw_conn.cursor() as cur:
-                        cur.copy_from(buffer, table_name, sep=',', null='')
-                    raw_conn.commit()
-                    print(f"Successfully updated {len(df)} rows to {table_name}")
-                finally:
-                    raw_conn.close()
-                    print(f"Successfully closed connection to {table_name}")
-        else:
-            print(f"Table {table_name} is empty")
-            return None 
-    except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
+        return
+    existing_df = get_table(db_url, table_name)
+    if existing_df is not None:
+        new_rows = df[~df.isin(existing_df.to_dict('list')).all(1)]
+        save_table(db_url, table_name, new_rows)
 
 def remove_duplicates(db_url, table_name, duplicate_columns=None, order_column=None):
     engine = create_engine(db_url)
-
-    try:
-        if not table_exists(db_url, table_name):
-            print(f"Table {table} does not exist")
-            return None
-        else:
-            meta = MetaData()
-            table = Table(table_name, meta, autoload_with=engine)
-            stmt = select(table.c)  # Fix is here
-            with engine.connect() as conn:
-                results = conn.execute(stmt).fetchall()
-
-            if duplicate_columns is None:
-                duplicate_columns = table.columns.keys()
-
-            if order_column is None:
-                order_column = table.columns.keys()[0]
-
-            df = pd.DataFrame(results, columns=table.columns.keys())
-
-            df = df.sort_values(by=[order_column], ascending=False)
-
-            df = df.drop_duplicates(subset=duplicate_columns, keep='first')
-            
-            # drop table
-            table.drop(engine)
-            # create table
-            create_table_from_df(engine, table_name, df)
-            # save table
-            save_table(db_url, table_name, df)
-
-    except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
-
+    df = get_table(db_url, table_name)
+    if df is not None:
+        duplicate_columns = duplicate_columns or df.columns
+        order_column = order_column or df.columns[0]
+        df.sort_values(by=order_column, ascending=False, inplace=True)
+        df.drop_duplicates(subset=duplicate_columns, keep='first', inplace=True)
+        Table(table_name, MetaData(), autoload_with=engine).drop(engine)
+        save_table(db_url, table_name, df)
 
 def drop_table(db_url, table_name):
     engine = create_engine(db_url)
-    try:
-        if not table_exists(db_url, table_name):
-            print(f"Table {table_name} does not exist")
-            return None
-        else:
-            meta = MetaData()
-            table = Table(table_name, meta, autoload_with=engine)
-            table.drop(engine)
-            print(f"Successfully dropped table {table_name}")
-    except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
+    if table_exists(db_url, table_name):
+        Table(table_name, MetaData(), autoload_with=engine).drop(engine)
+        print(f"Successfully dropped table {table_name}")
+
