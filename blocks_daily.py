@@ -48,7 +48,7 @@ def create_history(db_url, table_name, start_date, end_date=None):
             end_date = datetime.now().strftime("%Y-%m-%d 00:00:00")
         block_table = manage_data(web3_providers, start_date, end_date)
         if table_exists(db_url, table_name):
-            logger.info(f"Table already exists, changing new table name to {table_name}_new")
+            logger.warning(f"Table already exists, changing new table name to {table_name}_new")
             table_name = f"{table_name}_new"
         save_table(db_url, table_name, block_table)
         logger.info(f"Create Block Table - Time elapsed: {datetime.now() - start_time}")
