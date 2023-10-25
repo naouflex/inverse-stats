@@ -39,7 +39,6 @@ def build_methodology_table():
     
     except Exception as e:
         logger.error(f"Error in getting methodology : {e}")
-        traceback.logger.info_exc()
         return None
 
 
@@ -62,7 +61,7 @@ def validate_keys(data):
         try:
             data[col] = data[col].astype(new_type)
         except TypeError:
-            logger.info(f"Failed to cast column {col} to {new_type}")
+            logger.error(f"Failed to cast column {col} to {new_type}")
             pass
     return
 
@@ -82,7 +81,6 @@ def process_row(row, blocks,data):
         for i in range(len(blocks)):
             block_timestamp = blocks.iloc[i]['timestamp']
             block_identifier = blocks.iloc[i][row['chain_name_y']]
-            today_timestamp_at_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 
             # if None or block_identifier < row['start_block'] or Nan
             if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
@@ -91,7 +89,7 @@ def process_row(row, blocks,data):
             try :
                 formula = evaluate_formula(row['formula'],w3,row['abi'],None,block_identifier,block_timestamp)
             except Exception as e:
-                formula = 'Error'
+                formula = 0
                 logger.info(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
             
             temp_data = {
@@ -149,15 +147,13 @@ def create_history(db_url,table_name):
         
     except Exception as e:
         logger.error(traceback.format_exc())
-        logger.info(f"Total execution time: {datetime.now() - start_time}")
+        logger.error(f"Total execution time: {datetime.now() - start_time}")
 
 def update_history(db_url,table_name):
     try:
         start_time = datetime.now()
         full_methodology = build_methodology_table()
-
         current_data = get_table(db_url,table_name)
-        #logger.info(f"Current data : {(current_data)}")
 
         # get latest timestamp and block_number for each contract in the db
         latest_blocks = current_data.groupby(['contract_address']).agg({'timestamp': 'max', 'block_number': 'max'}).reset_index()
@@ -179,17 +175,16 @@ def update_history(db_url,table_name):
 
                 if blocks_to_read.empty:
                     if row_latest_timestamp < today_timestamp:
-                        logger.info('It seems blocks daily table is out of sync, please update it before proceeding.')
+                        logger.error('It seems blocks daily table is out of sync, please update it before proceeding.')
                         return
                     elif row_latest_timestamp == today_timestamp:
-                        logger.info(f"Skipping row {row['contract_name']} because it was already updated.")
+                        logger.warning(f"Skipping row {row['contract_name']} because it was already updated.")
                         continue
             
-                logger.info(f"Updating Row {row['contract_name']} latest timestamp: {row_latest_timestamp}, today timestamp: {today_timestamp}, blocks to scan: {blocks_to_read}")
+                logger.warning(f"Updating Row {row['contract_name']} latest timestamp: {row_latest_timestamp}, today timestamp: {today_timestamp}, blocks to scan: {blocks_to_read}")
 
             else:
-                logger.info(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
-
+                logger.warning(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
 
             row_list.append((row, blocks_to_read, data))
 
@@ -206,7 +201,7 @@ def update_history(db_url,table_name):
         
     except Exception as e:
         logger.error(traceback.format_exc())
-        logger.info(row)
+        logger.error(row)
 
 def create_current(db_url,table_name):
     # save as above but only for the last_block_number
@@ -230,10 +225,8 @@ def create_current(db_url,table_name):
             # Update blocks_row so we can access bloxks_row['timestamp'] and blocks_row[row['chain_name_y']]
             blocks_row = blocks_row.set_index('timestamp')
             blocks_row = blocks_row[[row['chain_name_y']]]
-            
             blocks_row = blocks_row.reset_index()
             blocks_row['timestamp'] = start_time.timestamp()
-            # make sure the timestamp is an int
             blocks_row['timestamp'] = blocks_row['timestamp'].astype(int)
 
             row_list.append((row, blocks_row, data))

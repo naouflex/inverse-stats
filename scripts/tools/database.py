@@ -2,10 +2,11 @@ import pandas as pd
 import traceback
 import sqlalchemy.exc as sqla_exc
 import io
+import logging
 
 from sqlalchemy import MetaData, Column, Integer, String, Float, DateTime, Table, select, create_engine, update
 
-
+logger = logging.getLogger(__name__)
 
 def table_exists(db_url, table_name):
     try:
@@ -43,7 +44,7 @@ def map_dtype(dtype):
     
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(traceback.format_exc())
         return 0
 
 
@@ -55,12 +56,12 @@ def create_table_from_df(engine, table_name, df):
         for col in df.columns:
             dtype_mapped = map_dtype(df[col].dtype)
             if dtype_mapped == 0:  # This means our mapping failed
-                logger.info(f"Mapping failed for column '{col}' with dtype '{df[col].dtype}'.")
+                logger.warning(f"Mapping failed for column '{col}' with dtype '{df[col].dtype}'.")
                 continue  # Skip adding this column
             columns.append(Column(col, dtype_mapped))
         
         if not columns:  # If no columns are mapped correctly
-            logger.info(f"No columns were successfully mapped for table '{table_name}'. Check your data.")
+            logger.warning(f"No columns were successfully mapped for table '{table_name}'. Check your data.")
             return
         
         table = Table(table_name, meta, *columns)
@@ -68,12 +69,12 @@ def create_table_from_df(engine, table_name, df):
         logger.info(f"Successfully created table info for {table_name}")
         
     except sqla_exc.SQLAlchemyError as e:
-        logger.info(f"SQLAlchemy error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(f"SQLAlchemy error occurred: {e}")
+        logger.error(traceback.format_exc())
         
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(traceback.format_exc())
 
 def save_table(db_url, table_name, df):
     engine = create_engine(db_url)
@@ -104,11 +105,11 @@ def save_table(db_url, table_name, df):
             raw_conn.close()
 
     except sqla_exc.SQLAlchemyError as e:
-        logger.info(f"SQLAlchemy error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(f"SQLAlchemy error occurred: {e}")
+        logger.error(traceback.format_exc())
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(traceback.format_exc())
 
 
 def get_table(db_url, table_name):
@@ -131,7 +132,7 @@ def update_table(db_url, table_name,df):
     engine = create_engine(db_url)
     try:
         if not table_exists(db_url, table_name):
-            logger.info(f"Table {table_name} does not exist")
+            logger.warning(f"Table {table_name} does not exist")
             return None
         df = df[df.columns] 
         existing_df = get_table(db_url,table_name)
@@ -159,14 +160,14 @@ def update_table(db_url, table_name,df):
                     raw_conn.close()
                     logger.info(f"Successfully closed connection to {table_name}")
         else:
-            logger.info(f"Table {table_name} is empty")
+            logger.warning(f"Table {table_name} is empty")
             return None 
     except sqla_exc.SQLAlchemyError as e:
-        logger.info(f"SQLAlchemy error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(f"SQLAlchemy error occurred: {e}")
+        logger.error(traceback.format_exc())
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(traceback.format_exc())
 
 def remove_duplicates(db_url, table_name, duplicate_columns=None, order_column=None):
     engine = create_engine(db_url)
@@ -198,17 +199,17 @@ def remove_duplicates(db_url, table_name, duplicate_columns=None, order_column=N
             save_table(db_url, table_name, df)
 
     except sqla_exc.SQLAlchemyError as e:
-        logger.info(f"SQLAlchemy error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(f"SQLAlchemy error occurred: {e}")
+        logger.error(traceback.format_exc())
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(traceback.format_exc())
 
 def drop_table(db_url, table_name):
     engine = create_engine(db_url)
     try:
         if not table_exists(db_url, table_name):
-            logger.info(f"Table {table_name} does not exist")
+            logger.warning(f"Table {table_name} does not exist")
             return None
         else:
             meta = MetaData()
@@ -216,8 +217,8 @@ def drop_table(db_url, table_name):
             table.drop(engine)
             logger.info(f"Successfully dropped table {table_name}")
     except sqla_exc.SQLAlchemyError as e:
-        logger.info(f"SQLAlchemy error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(f"SQLAlchemy error occurred: {e}")
+        logger.error(traceback.format_exc())
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        logger.info(traceback.format_exc())
+        logger.error(traceback.format_exc())

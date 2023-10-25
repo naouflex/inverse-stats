@@ -39,7 +39,6 @@ def build_methodology_table():
     
     except Exception as e:
         logger.error(f"Error in getting methodology : {e}")
-        traceback.logger.info_exc()
         return None
 
 def validate_keys(data):
@@ -63,7 +62,7 @@ def validate_keys(data):
         try:
             data[col] = data[col].astype(new_type)
         except TypeError:
-            logger.info(f"Failed to cast column {col} to {new_type}")
+            logger.error(f"Failed to cast column {col} to {new_type}")
             pass
     return
 
@@ -83,7 +82,6 @@ def process_row(row, prices, blocks,data):
         for i in range(len(blocks)):
             block_timestamp = blocks.iloc[i]['timestamp']
             block_identifier = blocks.iloc[i][row['chain_name_y']]
-            today_timestamp_at_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 
             # if None or block_identifier < row['start_block'] or Nan
             if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
@@ -91,13 +89,13 @@ def process_row(row, prices, blocks,data):
             try :
                 formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp)
             except Exception as e:
-                formulae_asset = 'Error'
-                logger.info(f"Error in evaluating formulae_asset : {e} : {traceback.format_exc()}")
+                formulae_asset = 0
+                logger.error(f"Error in evaluating formulae_asset : {e} : {traceback.format_exc()}")
             try:
                 formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp)
             except Exception as e:
-                formulae_liability = 'Error'
-                logger.info(f"Error in evaluating formulae_liability : {e} : {traceback.format_exc()}")
+                formulae_liability = 0
+                logger.error(f"Error in evaluating formulae_liability : {e} : {traceback.format_exc()}")
             
             temp_data = {
                     'timestamp':block_timestamp,
@@ -156,7 +154,7 @@ def create_history(db_url,table_name):
         
     except Exception as e:
         logger.error(traceback.format_exc())
-        logger.info(f"Total execution time: {datetime.now() - start_time}")
+        logger.error(f"Total execution time: {datetime.now() - start_time}")
 
 def update_history(db_url,table_name):
     try:
@@ -187,16 +185,16 @@ def update_history(db_url,table_name):
 
                 if blocks_to_read.empty:
                     if row_latest_timestamp < today_timestamp:
-                        logger.info('It seems blocks daily table is out of sync, please update it before proceeding.')
+                        logger.error('It seems blocks daily table is out of sync, please update it before proceeding.')
                         return
                     elif row_latest_timestamp == today_timestamp:
-                        logger.info(f"Skipping row {row['contract_name']} because it was already updated.")
+                        logger.warning(f"Skipping row {row['contract_name']} because it was already updated.")
                         continue
             
                 logger.info(f"Updating Row {row['contract_name']} latest timestamp: {row_latest_timestamp}, today timestamp: {today_timestamp}, blocks to scan: {blocks_to_read}")
 
             else:
-                logger.info(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
+                logger.warning(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
 
 
             row_list.append((row, prices, blocks_to_read, data))
@@ -215,8 +213,8 @@ def update_history(db_url,table_name):
         
     except Exception as e:
         logger.error(traceback.format_exc())
-        logger.info(row)
-        logger.info(f"Total execution time: {datetime.now() - start_time}")
+        logger.error(row)
+        logger.error(f"Total execution time: {datetime.now() - start_time}")
 
 def create_current(db_url,table_name):
     # save as above but only for the last_block_number

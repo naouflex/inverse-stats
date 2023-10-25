@@ -39,7 +39,6 @@ def build_methodology_table():
     
     except Exception as e:
         logger.error(f"Error in getting methodology : {e}")
-        traceback.logger.info_exc()
         return None
 
 def validate_keys(data):
@@ -64,7 +63,7 @@ def validate_keys(data):
             try:
                 data[col] = data[col].astype(new_type)
             except TypeError:
-                logger.info(f"Failed to cast column {col} to {new_type}")
+                logger.error(f"Failed to cast column {col} to {new_type}")
                 pass
         return
 
@@ -91,14 +90,14 @@ def process_row(row, prices, blocks,data):
             try :
                 formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp)
             except Exception as e:
-                formulae_asset = 'Error'
-                logger.info(f"Error in evaluating formula_asset : {e} : {traceback.format_exc()}")
+                formulae_asset = 0
+                logger.error(f"Error in evaluating formula_asset : {e} : {traceback.format_exc()}")
 
             try:
                 formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp)
             except Exception as e:
-                formulae_liability = 'Error'
-                logger.info(f"Error in evaluating formula_liability : {e} : {traceback.format_exc()}")
+                formulae_liability = 0
+                logger.error(f"Error in evaluating formula_liability : {e} : {traceback.format_exc()}")
             
             temp_data = {
                     'timestamp':block_timestamp,
@@ -166,8 +165,6 @@ def update_history(db_url,table_name):
         full_methodology = build_methodology_table()
 
         current_data = get_table(db_url,table_name)
-        #logger.info(f"Current data : {(current_data)}")
-
         # get latest timestamp and block_number for each contract in the db
         latest_blocks = current_data.groupby(['contract_address']).agg({'timestamp': 'max', 'block_number': 'max'}).reset_index()
 
@@ -189,17 +186,14 @@ def update_history(db_url,table_name):
 
                 if blocks_to_read.empty:
                     if row_latest_timestamp < today_timestamp:
-                        logger.info('It seems blocks daily table is out of sync, please update it before proceeding.')
+                        logger.error('It seems blocks daily table is out of sync, please update it before proceeding.')
                         return
                     elif row_latest_timestamp == today_timestamp:
-                        logger.info(f"Skipping row {row['contract_name']} because it was already updated.")
+                        logger.warning(f"Skipping row {row['contract_name']} because it was already updated.")
                         continue
-            
-                logger.info(f"Updating Row {row['contract_name']} latest timestamp: {row_latest_timestamp}, today timestamp: {today_timestamp}, blocks to scan: {blocks_to_read}")
-
+                logger.warning(f"Updating Row {row['contract_name']} latest timestamp: {row_latest_timestamp}, today timestamp: {today_timestamp}, blocks to scan: {blocks_to_read}")
             else:
-                logger.info(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
-
+                logger.warning(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
 
             row_list.append((row,prices, blocks_to_read, data))
 

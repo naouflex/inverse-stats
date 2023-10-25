@@ -2,11 +2,13 @@ import re
 import pandas as pd
 import traceback
 import json
+import logging
 
 from web3 import Web3
 from decimal import Decimal
 
 
+logger = logging.getLogger(__name__)
 
 def evaluate_operand(operand, w3, abi,prices, block_identifier, timestamp):
     try:
