@@ -24,4 +24,4 @@ try:
     create_current(db_url,table_name)
 
 except Exception as e:
-    print(traceback.format_exc())
+    logger.info(traceback.format_exc())

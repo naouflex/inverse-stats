@@ -42,8 +42,8 @@ def map_dtype(dtype):
             return String
     
     except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
+        logger.error(f"An error occurred: {e}")
+        logger.info(traceback.format_exc())
         return 0
 
 
@@ -55,25 +55,25 @@ def create_table_from_df(engine, table_name, df):
         for col in df.columns:
             dtype_mapped = map_dtype(df[col].dtype)
             if dtype_mapped == 0:  # This means our mapping failed
-                print(f"Mapping failed for column '{col}' with dtype '{df[col].dtype}'.")
+                logger.info(f"Mapping failed for column '{col}' with dtype '{df[col].dtype}'.")
                 continue  # Skip adding this column
             columns.append(Column(col, dtype_mapped))
         
         if not columns:  # If no columns are mapped correctly
-            print(f"No columns were successfully mapped for table '{table_name}'. Check your data.")
+            logger.info(f"No columns were successfully mapped for table '{table_name}'. Check your data.")
             return
         
         table = Table(table_name, meta, *columns)
         table.create(engine)
-        print(f"Successfully created table info for {table_name}")
+        logger.info(f"Successfully created table info for {table_name}")
         
     except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
+        logger.info(f"SQLAlchemy error occurred: {e}")
+        logger.info(traceback.format_exc())
         
     except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
+        logger.error(f"An error occurred: {e}")
+        logger.info(traceback.format_exc())
 
 def save_table(db_url, table_name, df):
     engine = create_engine(db_url)
@@ -91,31 +91,31 @@ def save_table(db_url, table_name, df):
         try:
             # check that table exists and buffer is not empty
             if not table_exists(db_url, table_name):
-                print(f"Table {table_name} does not exist")
+                logger.info(f"Table {table_name} does not exist")
                 return None
             elif len(df) == 0:
-                print(f"No rows to save in {table_name}")
+                logger.info(f"No rows to save in {table_name}")
                 return None
             with raw_conn.cursor() as cur:
                 cur.copy_from(buffer, table_name, sep=',', null='')
             raw_conn.commit()
-            print(f"Successfully saved {len(df)} rows to {table_name}")
+            logger.info(f"Successfully saved {len(df)} rows to {table_name}")
         finally:
             raw_conn.close()
 
     except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
+        logger.info(f"SQLAlchemy error occurred: {e}")
+        logger.info(traceback.format_exc())
     except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
+        logger.error(f"An error occurred: {e}")
+        logger.info(traceback.format_exc())
 
 
 def get_table(db_url, table_name):
     engine = create_engine(db_url)
 
     if not table_exists(db_url, table_name):
-        print(f"Table {table_name} does not exist")
+        logger.info(f"Table {table_name} does not exist")
         return None
     else:
         meta = MetaData()
@@ -124,14 +124,14 @@ def get_table(db_url, table_name):
         with engine.connect() as conn:
             results = conn.execute(stmt).fetchall()
         df = pd.DataFrame(results, columns=table.columns.keys())
-        print(f"Successfully read {len(df)} rows from {table_name}")
+        logger.info(f"Successfully read {len(df)} rows from {table_name}")
         return df
 
 def update_table(db_url, table_name,df):
     engine = create_engine(db_url)
     try:
         if not table_exists(db_url, table_name):
-            print(f"Table {table_name} does not exist")
+            logger.info(f"Table {table_name} does not exist")
             return None
         df = df[df.columns] 
         existing_df = get_table(db_url,table_name)
@@ -142,7 +142,7 @@ def update_table(db_url, table_name,df):
             try:
                 df = df[~df.isin(existing_df.to_dict('list')).all(1)]
             except:
-                print(f"No new rows to update in {table_name}")
+                logger.info(f"No new rows to update in {table_name}")
                 return None
             else:
                 buffer = io.StringIO()
@@ -154,26 +154,26 @@ def update_table(db_url, table_name,df):
                     with raw_conn.cursor() as cur:
                         cur.copy_from(buffer, table_name, sep=',', null='')
                     raw_conn.commit()
-                    print(f"Successfully updated {len(df)} rows to {table_name}")
+                    logger.info(f"Successfully updated {len(df)} rows to {table_name}")
                 finally:
                     raw_conn.close()
-                    print(f"Successfully closed connection to {table_name}")
+                    logger.info(f"Successfully closed connection to {table_name}")
         else:
-            print(f"Table {table_name} is empty")
+            logger.info(f"Table {table_name} is empty")
             return None 
     except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
+        logger.info(f"SQLAlchemy error occurred: {e}")
+        logger.info(traceback.format_exc())
     except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
+        logger.error(f"An error occurred: {e}")
+        logger.info(traceback.format_exc())
 
 def remove_duplicates(db_url, table_name, duplicate_columns=None, order_column=None):
     engine = create_engine(db_url)
 
     try:
         if not table_exists(db_url, table_name):
-            print(f"Table {table} does not exist")
+            logger.info(f"Table {table} does not exist")
             return None
         else:
             meta = MetaData()
@@ -198,27 +198,26 @@ def remove_duplicates(db_url, table_name, duplicate_columns=None, order_column=N
             save_table(db_url, table_name, df)
 
     except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
+        logger.info(f"SQLAlchemy error occurred: {e}")
+        logger.info(traceback.format_exc())
     except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
-
+        logger.error(f"An error occurred: {e}")
+        logger.info(traceback.format_exc())
 
 def drop_table(db_url, table_name):
     engine = create_engine(db_url)
     try:
         if not table_exists(db_url, table_name):
-            print(f"Table {table_name} does not exist")
+            logger.info(f"Table {table_name} does not exist")
             return None
         else:
             meta = MetaData()
             table = Table(table_name, meta, autoload_with=engine)
             table.drop(engine)
-            print(f"Successfully dropped table {table_name}")
+            logger.info(f"Successfully dropped table {table_name}")
     except sqla_exc.SQLAlchemyError as e:
-        print(f"SQLAlchemy error occurred: {e}")
-        print(traceback.format_exc())
+        logger.info(f"SQLAlchemy error occurred: {e}")
+        logger.info(traceback.format_exc())
     except Exception as e:
-        print(f"An error occurred: {e}")
-        print(traceback.format_exc())
+        logger.error(f"An error occurred: {e}")
+        logger.info(traceback.format_exc())

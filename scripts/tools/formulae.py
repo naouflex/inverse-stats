@@ -48,10 +48,10 @@ def evaluate_operand(operand, w3, abi,prices, block_identifier, timestamp):
                     result = result[index1]
                     if index2 is not None:
                         result = result[index2]
-                        #print(f"Call result : {result}")
+                        #logger.info(f"Call result : {result}")
                 return result        
             except Exception as e:
-                print(f"Error in evaluating method: {operand} : {e}")
+                logger.info(f"Error in evaluating method: {operand} : {e}")
                 return 0
             
         elif operand[0] == '%':
@@ -78,19 +78,19 @@ def evaluate_operand(operand, w3, abi,prices, block_identifier, timestamp):
                     price = Decimal(price) / Decimal(10 ** int(decimals))
                 return price or 0
             except Exception as e:
-                print(f"Price cannot be found for {operand} at timestamp {timestamp}")
+                logger.info(f"Price cannot be found for {operand} at timestamp {timestamp}")
                 return 0
             
         else:
             return float(operand)
 
     except Exception as e:
-        print(traceback.format_exc())
+        logger.error(traceback.format_exc())
         return 0
 
 # Apply operator with None value and type handling
 def apply_operator(operator, operand1, operand2):
-    #print(f"Applying operator: {operator}, operand1: {operand1} (type: {type(operand1)}), operand2: {operand2} (type: {type(operand2)})")
+    #logger.info(f"Applying operator: {operator}, operand1: {operand1} (type: {type(operand1)}), operand2: {operand2} (type: {type(operand2)})")
     
     if operand1 is None or operand2 is None:
         return None

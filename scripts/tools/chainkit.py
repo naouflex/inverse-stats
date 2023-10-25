@@ -52,7 +52,7 @@ def find_block_for_date(w3,current_date, df_list):
 
 def get_blocks_by_date_range(w3,start_date, end_date=None):
     if not w3.isConnected():
-        print("Not connected to Ethereum node.")
+        logger.info("Not connected to Ethereum node.")
         return None
     if type(start_date) == str:
         start_date = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')

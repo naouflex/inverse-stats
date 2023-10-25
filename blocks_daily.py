@@ -33,7 +33,7 @@ def process_chain_data(w3, chain_name, start_date=None, end_date=None):
 def manage_data(web3_providers, start_date=None, end_date=None):
     data_frames = []
     for _, row in web3_providers.iterrows():
-        print(f"Processing chain_id: {row['chain_id']} name: {row['chain_name']}")
+        logger.info(f"Processing chain_id: {row['chain_id']} name: {row['chain_name']}")
         w3 = Web3(Web3.HTTPProvider(row['rpc_url']))
         w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         data_frames.append(process_chain_data(w3, row['chain_name'], start_date, end_date))
