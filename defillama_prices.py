@@ -154,8 +154,6 @@ def update_history(db_url, table_name):
                 'contract_address': latest_timestamp.loc[index, 'token_address'],
                 'timestamp': latest_timestamp.loc[index, 'timestamp']
             })
-
-
         data = {"coins": {}}
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
