@@ -22,8 +22,7 @@ CHAIN_ID_MAP = {
     'ethereum': 1, 'bsc': 56, 'polygon': 137, 'fantom': 250, 
     'optimism': 10, 'arbitrum': 42161, 'avax': 43114
 }
-TOKEN_API_URL = "https://app.inverse.watch/api/queries/480/results.json?api_key=JY9REfUM3L7Ietj76qmQ2wFioz7k6GdCL6YqRxHG"
-
+PRICE_METHODOLOGY = "https://app.inverse.watch/api/queries/480/results.json?api_key=JY9REfUM3L7Ietj76qmQ2wFioz7k6GdCL6YqRxHG"
 
 def fetch_json(url):
     return requests.get(url).json()
@@ -59,16 +58,25 @@ def fetch_and_update_data(token_info, data):
     try:
         chain_slug, contract_address = token_info['chain_slug'], token_info['contract_address']
         token_data = fetch_token_data(chain_slug, contract_address)
-        start_timestamp = int(token_data["coins"][f"{chain_slug}:{contract_address}"]['timestamp'])
-        start_timestamp = int(datetime.utcfromtimestamp(start_timestamp).replace(hour=0, minute=0, second=0).timestamp())
+        
+        # check if token_info['timestamp'] exists and prevent KeyError if it doesn't
+        if 'timestamp' in token_info:
+            start_timestamp = int(token_info['timestamp']) + 86400
+        else:
+            start_timestamp = int(token_data["coins"][f"{chain_slug}:{contract_address}"]['timestamp'])
+            start_timestamp = int(datetime.utcfromtimestamp(start_timestamp).replace(hour=0, minute=0, second=0).timestamp())
+
         end_timestamp = int(datetime.utcnow().replace(hour=0, minute=0, second=0).timestamp())
         days_since_start = (datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days + 1
         token_info.update({'timestamp': start_timestamp, 'days': days_since_start})
         chart_data = fetch_chart_data(chain_slug, contract_address, end_timestamp, days_since_start)
+
         with lock:
             data['coins'][f"{chain_slug}:{contract_address}"] = chart_data['coins'][f"{chain_slug}:{contract_address}"]
+
     except Exception:
         logger.error(f"Cannot find price data for {token_info}")
+        logger.error(traceback.format_exc())
 
 def fetch_current_prices_from_tokens(token_address_list):
     tokens = ','.join([f"{info['chain_slug']}:{info['contract_address']}" for info in token_address_list])
@@ -110,12 +118,12 @@ def process_dataframe(data):
     validate_keys(df)
     return df
 
-
 def create_history(db_url, table_name):
     try:
         start_time = datetime.now()
-        token_address_list = fetch_json(TOKEN_API_URL)["query_result"]["data"]["rows"]
+        token_address_list = fetch_json(PRICE_METHODOLOGY)["query_result"]["data"]["rows"]
         data = {"coins": {}}
+
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for token_info in token_address_list:
                 executor.submit(fetch_and_update_data, token_info, data)
@@ -128,10 +136,36 @@ def create_history(db_url, table_name):
     except Exception:
         logger.error(f"Error in creating historical price table : {traceback.format_exc()}")
 
+def update_history(db_url, table_name):
+    try:
+        start_time = datetime.now()
+        token_address_list = fetch_json(PRICE_METHODOLOGY)["query_result"]["data"]["rows"]
+
+        current_data = get_table(db_url, table_name)
+
+        #get latest timestamp for each token in current_data
+        latest_timestamp = current_data.groupby(['chain_id', 'token_address'])['timestamp'].max().reset_index()
+
+
+        data = {"coins": {}}
+
+        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+            for token_info in token_address_list:
+                executor.submit(fetch_and_update_data, token_info, data)
+        df = process_dataframe(data)
+        if table_exists(db_url, table_name):
+            update_table(db_url, table_name, df)
+        else:
+            save_table(db_url, table_name, df)
+        remove_duplicates(db_url, table_name, ['timestamp', 'chain_id', 'token_address'], 'last_updated')
+        logger.info(f"Total time: {datetime.now() - start_time}")
+    except Exception:
+        logger.error(f"Error in updating historical price table : {traceback.format_exc()}")
+
 def create_current(db_url, table_name):
     try:
         start_time = datetime.now()
-        token_address_list = fetch_json(TOKEN_API_URL)["query_result"]["data"]["rows"]
+        token_address_list = fetch_json(PRICE_METHODOLOGY)["query_result"]["data"]["rows"]
         data = {"coins": {}}
         fetch_and_save_current_data(token_address_list, data)
         df = process_dataframe(data)

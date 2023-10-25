@@ -12,7 +12,7 @@ from web3.middleware import geth_poa_middleware
 from concurrent.futures import ThreadPoolExecutor
 
 from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table
-from scripts.tools.formulae import evaluate_formula
+from scripts.tools.formulae import evaluate_formula, build_methodology_table
 
 logger = logging.getLogger(__name__)
 MAX_THREADS = 10
@@ -20,26 +20,8 @@ MAX_THREADS = 10
 lock = threading.Lock()
 load_dotenv()
 
-def build_methodology_table():
-    try:
-        methodology = requests.get("https://app.inverse.watch/api/queries/479/results.json?api_key=zCljA8HpUclyQQ4xHH3mpIaCBhjtjf2ljTd77Y9V").json()
-        web3_providers = requests.get(os.getenv("WEB3_PROVIDERS")).json()
-
-        methodology = pd.DataFrame(methodology['query_result']['data']['rows'])
-        web3_providers = pd.DataFrame(web3_providers['query_result']['data']['rows']) 
-
-        for i in range(len(web3_providers)):
-            w3 = Web3(Web3.HTTPProvider(web3_providers['rpc_url'][i]))
-            w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-            web3_providers.loc[i, 'last_block_number'] = w3.eth.blockNumber
-
-        full_methodology = pd.merge(methodology, web3_providers, on='chain_id', how='left')
-        
-        return full_methodology
-    
-    except Exception as e:
-        logger.error(f"Error in getting methodology : {e}")
-        return None
+METHODOLOGY_URL = "https://app.inverse.watch/api/queries/479/results.json?api_key=zCljA8HpUclyQQ4xHH3mpIaCBhjtjf2ljTd77Y9V"
+WEB3_PROVIDERS_URL = os.getenv("WEB3_PROVIDERS")
 
 def validate_keys(data):
         valid_keys = {k: v for k, v in {
@@ -128,7 +110,7 @@ def process_row(row, prices, blocks,data):
 def create_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table()
+        full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
         prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
@@ -162,7 +144,7 @@ def create_history(db_url,table_name):
 def update_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table()
+        full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         current_data = get_table(db_url,table_name)
         # get latest timestamp and block_number for each contract in the db
@@ -216,7 +198,7 @@ def create_current(db_url,table_name):
     # save as above but only for the last_block_number
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table()
+        full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_current')
         prices = get_table(os.getenv('PROD_DB'), 'defillama_prices_current')
