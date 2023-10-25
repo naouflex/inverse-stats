@@ -24,11 +24,9 @@ def build_methodology_table():
     try:
         methodology = requests.get("https://app.inverse.watch/api/queries/492/results.json?api_key=8eH4yNtb6tYYbTWHskb5a4MrLbeccV93NdbFcg64").json()
         web3_providers = requests.get(os.getenv("WEB3_PROVIDERS")).json()
-        smart_contracts = requests.get("https://app.inverse.watch/api/queries/454/results.json?api_key=CNsPQor5gykZdi7jS746PngKK5M8KGeZsGvOZZPf").json()
 
         methodology = pd.DataFrame(methodology['query_result']['data']['rows'])
         web3_providers = pd.DataFrame(web3_providers['query_result']['data']['rows']) 
-        smart_contracts = pd.DataFrame(smart_contracts['query_result']['data']['rows'])
 
         for i in range(len(web3_providers)):
             w3 = Web3(Web3.HTTPProvider(web3_providers['rpc_url'][i]))
@@ -36,9 +34,6 @@ def build_methodology_table():
             web3_providers.loc[i, 'last_block_number'] = w3.eth.blockNumber
 
         full_methodology = pd.merge(methodology, web3_providers, on='chain_id', how='left')
-        full_methodology['abi_address'] = full_methodology['abi_address'].str.lower()
-        smart_contracts['abi_address'] = smart_contracts['address'].str.lower()
-        full_methodology = pd.merge(full_methodology, smart_contracts, on='abi_address', how='left')
 
         return full_methodology
     
@@ -103,7 +98,7 @@ def process_row(row, blocks,data):
                     'timestamp':block_timestamp,
                     'block_number':block_identifier,
                     'account_id':row['account_id'],
-                    'chain_id':row['chain_id_x'],
+                    'chain_id':row['chain_id'],
                     'chain_name_x':row['chain_name_x'],
                     'contract_address':row['contract_address'],
                     'protocol':row['protocol'],

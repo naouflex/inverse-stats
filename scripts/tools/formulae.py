@@ -1,6 +1,7 @@
 import re
 import pandas as pd
 import traceback
+import json
 
 from web3 import Web3
 from decimal import Decimal
@@ -35,7 +36,7 @@ def evaluate_operand(operand, w3, abi,prices, block_identifier, timestamp):
                 argument = w3.toChecksumAddress(argument)
 
             try:
-                contract = w3.eth.contract(address=Web3.toChecksumAddress(contract), abi=abi)
+                contract = w3.eth.contract(address=Web3.toChecksumAddress(contract), abi=json.loads(abi))
                 method = getattr(contract.functions, method)
                 if argument is not None and argument != '':
                     method = method(argument)
