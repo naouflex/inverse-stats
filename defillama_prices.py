@@ -127,6 +127,7 @@ def create_history(db_url, table_name):
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for token_info in token_address_list:
                 executor.submit(fetch_and_update_data, token_info, data)
+                logger.info(f"Finished fetching data for {token_info}")
         df = process_dataframe(data)
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
@@ -145,6 +146,14 @@ def update_history(db_url, table_name):
 
         #get latest timestamp for each token in current_data
         latest_timestamp = current_data.groupby(['chain_id', 'token_address'])['timestamp'].max().reset_index()
+
+        #add latest timestamp to token_address_list if it exists for each token only
+        for index, row in latest_timestamp.iterrows():
+            token_address_list.append({
+                'chain_slug': latest_timestamp.loc[index, 'chain_id'],
+                'contract_address': latest_timestamp.loc[index, 'token_address'],
+                'timestamp': latest_timestamp.loc[index, 'timestamp']
+            })
 
 
         data = {"coins": {}}
