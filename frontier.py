@@ -204,7 +204,7 @@ def create_current(db_url,table_name):
     # save as above but only for the last_block_number
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table()
+        full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_current')
         prices = get_table(os.getenv('PROD_DB'), 'defillama_prices_current')
