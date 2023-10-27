@@ -13,7 +13,7 @@ from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
-def evaluate_operand(operand, w3, abi,prices, block_identifier, timestamp):
+def evaluate_operand(operand, w3, abi,prices, block_identifier, timestamp,current):
     try:
         
         if operand is None or pd.isnull(operand) or operand == '':
@@ -62,13 +62,19 @@ def evaluate_operand(operand, w3, abi,prices, block_identifier, timestamp):
         elif operand[0] == '%':
             try:
                 chain_slug, contract_address = operand[1:].split(':')
-                
-                filtered_prices = prices[
-                    (prices['chain'] == chain_slug) &
-                    (prices['token_address'].str.lower() == contract_address.lower()) &
-                    (prices['timestamp'] <= int(timestamp)) &
-                    (prices['timestamp'] >= int(timestamp) - 86400)*7
-                ]
+
+                if not current :
+                    filtered_prices = prices[
+                        (prices['chain'] == chain_slug) &
+                        (prices['token_address'].str.lower() == contract_address.lower()) &
+                        (prices['timestamp'] <= int(timestamp)) &
+                        (prices['timestamp'] >= int(timestamp) - 86400)*7
+                    ]
+                else:
+                    filtered_prices = prices[
+                        (prices['chain'] == chain_slug) &
+                        (prices['token_address'].str.lower() == contract_address.lower()) 
+                    ]
 
                 # Check if the DataFrame is empty
                 if filtered_prices.empty:
@@ -141,7 +147,7 @@ def shunting_yard_infix_to_postfix(parts):
     return output
 
 # Evaluate postfix expression
-def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp):
+def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp,current):
     stack = []
     for element in postfix:
         if element in ['+', '-', '*', '/']:
@@ -149,11 +155,11 @@ def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp)
             operand1 = stack.pop()
             stack.append(apply_operator(element, operand1, operand2))
         else:
-            stack.append(evaluate_operand(element, w3,abi, prices, block_identifier, block_timestamp))
+            stack.append(evaluate_operand(element, w3,abi, prices, block_identifier, block_timestamp,current))
     return stack[0]
 
 # Evaluate formula
-def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp):
+def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp,current):
     if string is None or pd.isnull(string) or string == '':
         return None
     
@@ -165,7 +171,7 @@ def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp):
     postfix = shunting_yard_infix_to_postfix(parts)
     
     # Evaluate the postfix expression
-    return evaluate_postfix(postfix, w3, abi,prices, block_identifier, block_timestamp)
+    return evaluate_postfix(postfix, w3, abi,prices, block_identifier, block_timestamp,current)
 
 
 def build_methodology_table(methodology_url,web3_providers_url):

@@ -47,7 +47,7 @@ def validate_keys(data):
             pass
     return
 
-def process_row(row, blocks,data):
+def process_row(row, blocks,data,current):
     try:
         #blocks_row is a pd series
         contract_start_time = datetime.now()
@@ -69,7 +69,7 @@ def process_row(row, blocks,data):
                 continue
 
             try :
-                formula = evaluate_formula(row['formula'],w3,row['abi'],None,block_identifier,block_timestamp)
+                formula = evaluate_formula(row['formula'],w3,row['abi'],None,block_identifier,block_timestamp,current)
             except Exception as e:
                 formula = 0
                 logger.info(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
@@ -101,9 +101,9 @@ def create_history(db_url,table_name):
     try:
         start_time = datetime.now()
         full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
-
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
-        
+
+        current = False        
         data = []
         row_list = []
 
@@ -111,7 +111,7 @@ def create_history(db_url,table_name):
             row = full_methodology.iloc[i]
             # subset blocks on date and row['chain_name_y']
             blocks_row = blocks[['timestamp',row['chain_name_y']]]
-            row_list.append((row, blocks_row, data))
+            row_list.append((row, blocks_row, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
@@ -135,6 +135,8 @@ def update_history(db_url,table_name):
     try:
         start_time = datetime.now()
         full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+
+        current = False
         current_data = get_table(db_url,table_name)
 
         # get latest timestamp and block_number for each contract in the db
@@ -168,7 +170,7 @@ def update_history(db_url,table_name):
             else:
                 logger.warning(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
 
-            row_list.append((row, blocks_to_read, data))
+            row_list.append((row, blocks_to_read, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
@@ -193,6 +195,7 @@ def create_current(db_url,table_name):
 
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_current')
         
+        current = True
         data = []
         row_list = []
 
@@ -211,7 +214,7 @@ def create_current(db_url,table_name):
             blocks_row['timestamp'] = start_time.timestamp()
             blocks_row['timestamp'] = blocks_row['timestamp'].astype(int)
 
-            row_list.append((row, blocks_row, data))
+            row_list.append((row, blocks_row, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:

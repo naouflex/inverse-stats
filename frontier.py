@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from web3.middleware import geth_poa_middleware
 from concurrent.futures import ThreadPoolExecutor
 
-from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table
+from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table, remove_duplicates
 from scripts.tools.formulae import evaluate_formula, build_methodology_table
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,6 @@ load_dotenv()
 
 METHODOLOGY_URL = "https://app.inverse.watch/api/queries/499/results.json?api_key=hPTTHXRhBI36YiK4UYrYzFA481GheipJLJ1ubIOA"
 WEB3_PROVIDERS_URL = os.getenv("WEB3_PROVIDERS")
-
 
 def validate_keys(data):
     valid_keys = {k: v for k, v in {
@@ -50,7 +49,7 @@ def validate_keys(data):
             pass
     return
 
-def process_row(row, prices, blocks,data):
+def process_row(row, prices, blocks,data,current):
     try:
         #blocks_row is a pd series
         contract_start_time = datetime.now()
@@ -71,12 +70,12 @@ def process_row(row, prices, blocks,data):
             if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
                 continue
             try :
-                formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp)
+                formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
                 formulae_asset = 0
                 logger.error(f"Error in evaluating formulae_asset : {e} : {traceback.format_exc()}")
             try:
-                formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp)
+                formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
                 formulae_liability = 0
                 logger.error(f"Error in evaluating formulae_liability : {e} : {traceback.format_exc()}")
@@ -110,17 +109,17 @@ def create_history(db_url,table_name):
     try:
         start_time = datetime.now()
         full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
-
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
         prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
         
+        current = False
         data = []
         row_list = []
 
         for i in range(len(full_methodology)):
             row = full_methodology.iloc[i]
             blocks_row = blocks[['timestamp',row['chain_name_y']]]
-            row_list.append((row,prices, blocks_row, data))
+            row_list.append((row,prices, blocks_row, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
@@ -145,8 +144,8 @@ def update_history(db_url,table_name):
         start_time = datetime.now()
         full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
+        current = False
         current_data = get_table(db_url,table_name)
-        #logger.info(f"Current data : {(current_data)}")
 
         # get latest timestamp and block_number for each contract in the db
         latest_blocks = current_data.groupby(['contract_address']).agg({'timestamp': 'max', 'block_number': 'max'}).reset_index()
@@ -172,7 +171,7 @@ def update_history(db_url,table_name):
                         logger.error('It seems blocks daily table is out of sync, please update it before proceeding.')
                         return
                     elif row_latest_timestamp == today_timestamp:
-                        logger.warning(f"Skipping row {row['contract_name']} because it was already updated.")
+                        logger.warning(f"Skipping row {row['contract_name']} because it's already up to date.")
                         continue
             
                 logger.info(f"Updating Row {row['contract_name']} latest timestamp: {row_latest_timestamp}, today timestamp: {today_timestamp}, blocks to scan: {blocks_to_read}")
@@ -181,7 +180,7 @@ def update_history(db_url,table_name):
                 logger.warning(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
 
 
-            row_list.append((row, prices, blocks_to_read, data))
+            row_list.append((row, prices, blocks_to_read, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
@@ -190,25 +189,22 @@ def update_history(db_url,table_name):
         data = pd.DataFrame(data)
 
         validate_keys(data)
-
         update_table(db_url,table_name,data)
 
         logger.info(f"Total execution time: {datetime.now() - start_time}")
         
     except Exception as e:
         logger.error(traceback.format_exc())
-        logger.error(row)
         logger.error(f"Total execution time: {datetime.now() - start_time}")
 
 def create_current(db_url,table_name):
-    # save as above but only for the last_block_number
     try:
         start_time = datetime.now()
         full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
-
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_current')
         prices = get_table(os.getenv('PROD_DB'), 'defillama_prices_current')
         
+        current = True
         data = []
         row_list = []
 
@@ -226,17 +222,15 @@ def create_current(db_url,table_name):
             
             blocks_row = blocks_row.reset_index()
             blocks_row['timestamp'] = start_time.timestamp()
-            # make sure the timestamp is an int
             blocks_row['timestamp'] = blocks_row['timestamp'].astype(int)
 
-            row_list.append((row,prices, blocks_row, data))
+            row_list.append((row,prices, blocks_row, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
                 executor.submit(process_row, *row_data)
 
         data = pd.DataFrame(data)
-
         data['timestamp'] = data['timestamp'].astype('Int64')
 
         validate_keys(data)

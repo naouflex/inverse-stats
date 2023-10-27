@@ -10,8 +10,8 @@ logging.basicConfig(level=logging.INFO,
 try:
     db_url = os.getenv('PROD_DB')
     
-    table_name = 'dola_supply_history'
-    create_history(db_url,table_name)
+    #table_name = 'dola_supply_history'
+    #create_history(db_url,table_name)
 
     table_name = 'dola_supply_current'
     create_current(db_url,table_name)

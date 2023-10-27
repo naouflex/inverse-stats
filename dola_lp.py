@@ -49,7 +49,7 @@ def validate_keys(data):
                 pass
         return
 
-def process_row(row, prices, blocks,data):
+def process_row(row, prices, blocks,data,current):
     try:
         #blocks_row is a pd series
         contract_start_time = datetime.now()
@@ -70,13 +70,13 @@ def process_row(row, prices, blocks,data):
                 continue
 
             try :
-                formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp)
+                formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
                 formulae_asset = 0
                 logger.error(f"Error in evaluating formula_asset : {e} : {traceback.format_exc()}")
 
             try:
-                formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp)
+                formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
                 formulae_liability = 0
                 logger.error(f"Error in evaluating formula_liability : {e} : {traceback.format_exc()}")
@@ -115,6 +115,7 @@ def create_history(db_url,table_name):
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
         prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
         
+        current = False
         data = []
         row_list = []
 
@@ -122,7 +123,7 @@ def create_history(db_url,table_name):
             row = full_methodology.iloc[i]
             # subset blocks on date and row['chain_name_y']
             blocks_row = blocks[['timestamp',row['chain_name_y']]]
-            row_list.append((row,prices, blocks_row, data))
+            row_list.append((row,prices, blocks_row, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
@@ -153,6 +154,7 @@ def update_history(db_url,table_name):
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
         prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
         
+        current = False
         data = []
         row_list = []
 
@@ -177,7 +179,7 @@ def update_history(db_url,table_name):
             else:
                 logger.warning(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
 
-            row_list.append((row,prices, blocks_to_read, data))
+            row_list.append((row,prices, blocks_to_read, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
@@ -203,6 +205,7 @@ def create_current(db_url,table_name):
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_current')
         prices = get_table(os.getenv('PROD_DB'), 'defillama_prices_current')
         
+        current = True
         data = []
         row_list = []
 
@@ -223,7 +226,7 @@ def create_current(db_url,table_name):
             # make sure the timestamp is an int
             blocks_row['timestamp'] = blocks_row['timestamp'].astype(int)
 
-            row_list.append((row,prices, blocks_row, data))
+            row_list.append((row,prices, blocks_row, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:

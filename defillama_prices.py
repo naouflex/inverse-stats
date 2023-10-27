@@ -67,7 +67,7 @@ def fetch_and_update_data(token_info, data):
             start_timestamp = int(datetime.utcfromtimestamp(start_timestamp).replace(hour=0, minute=0, second=0).timestamp())
 
         end_timestamp = int(datetime.utcnow().replace(hour=0, minute=0, second=0).timestamp())
-        days_since_start = (datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days + 1
+        days_since_start = (datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days
         token_info.update({'timestamp': start_timestamp, 'days': days_since_start})
         chart_data = fetch_chart_data(chain_slug, contract_address, end_timestamp, days_since_start)
 
@@ -83,7 +83,7 @@ def fetch_current_prices_from_tokens(token_address_list):
     url = f"https://coins.llama.fi/prices/current/{tokens}?searchWidth=4h"
     return fetch_json(url)
 
-def fetch_and_save_current_data(token_info, data):
+def fetch_current_data(token_info, data):
     try:
         current_prices_data = fetch_current_prices_from_tokens(token_info)
         for key, value in current_prices_data['coins'].items():
@@ -98,7 +98,7 @@ def fetch_and_save_current_data(token_info, data):
     except Exception:
         logger.error(traceback.format_exc())
 
-def process_dataframe(data):
+def process_dataframe(data,current=True):
     df = pd.DataFrame(data)
     df.reset_index(level=0, inplace=True)
     df.rename(columns={"index": "chain:token_address"}, inplace=True)
@@ -106,12 +106,19 @@ def process_dataframe(data):
     df = pd.concat([df.drop(['coins', 'chain:token_address'], axis=1), df['coins'].apply(pd.Series)], axis=1)
     df = df.explode('prices')
     df = pd.concat([df.drop(['prices'], axis=1), df['prices'].apply(pd.Series)], axis=1)
+    df.rename(columns={0: "timestamp", 1: "price"}, inplace=True)
+
+    if current:
+        # current unix timestamp
+        df['timestamp'] = pd.to_datetime(datetime.now())
+    else:
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+        df['timestamp'] = df['timestamp'].apply(lambda x: x + timedelta(days=1) if x.time() >= pd.Timestamp('12:00:00').time() else x)
     
-    # Round 'timestamp' to the nearest midnight utc
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-    df['timestamp'] = df['timestamp'].apply(lambda x: x + timedelta(days=1) if x.time() >= pd.Timestamp('12:00:00').time() else x)
     df['timestamp'] = df['timestamp'].dt.normalize()
-    df['timestamp'] = df['timestamp'].view('int64') // 10**9
+
+    # convert timetime to int64 and divide by 10^9 to get unix timestamp
+    df['timestamp'] = df['timestamp'].astype('int64') // 10**9
     
     df['chain_id'] = df['chain'].map(CHAIN_ID_MAP)
     df['last_updated'] = datetime.now()
@@ -128,7 +135,9 @@ def create_history(db_url, table_name):
             for token_info in token_address_list:
                 executor.submit(fetch_and_update_data, token_info, data)
                 logger.info(f"Finished fetching data for {token_info}")
-        df = process_dataframe(data)
+
+        df = process_dataframe(data, current=False)
+
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
         save_table(db_url, table_name, df)
@@ -137,45 +146,15 @@ def create_history(db_url, table_name):
     except Exception:
         logger.error(f"Error in creating historical price table : {traceback.format_exc()}")
 
-def update_history(db_url, table_name):
-    try:
-        start_time = datetime.now()
-        token_address_list = fetch_json(PRICE_METHODOLOGY)["query_result"]["data"]["rows"]
-
-        current_data = get_table(db_url, table_name)
-
-        #get latest timestamp for each token in current_data
-        latest_timestamp = current_data.groupby(['chain_id', 'token_address'])['timestamp'].max().reset_index()
-
-        #add latest timestamp to token_address_list if it exists for each token only
-        for index, row in latest_timestamp.iterrows():
-            token_address_list.append({
-                'chain_slug': latest_timestamp.loc[index, 'chain_id'],
-                'contract_address': latest_timestamp.loc[index, 'token_address'],
-                'timestamp': latest_timestamp.loc[index, 'timestamp']
-            })
-        data = {"coins": {}}
-
-        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-            for token_info in token_address_list:
-                executor.submit(fetch_and_update_data, token_info, data)
-        df = process_dataframe(data)
-        if table_exists(db_url, table_name):
-            update_table(db_url, table_name, df)
-        else:
-            save_table(db_url, table_name, df)
-        remove_duplicates(db_url, table_name, ['timestamp', 'chain_id', 'token_address'], 'last_updated')
-        logger.info(f"Total time: {datetime.now() - start_time}")
-    except Exception:
-        logger.error(f"Error in updating historical price table : {traceback.format_exc()}")
-
 def create_current(db_url, table_name):
     try:
         start_time = datetime.now()
         token_address_list = fetch_json(PRICE_METHODOLOGY)["query_result"]["data"]["rows"]
         data = {"coins": {}}
-        fetch_and_save_current_data(token_address_list, data)
-        df = process_dataframe(data)
+        fetch_current_data(token_address_list, data)
+
+        df = process_dataframe(data, current=True)
+
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
         save_table(db_url, table_name, df)
