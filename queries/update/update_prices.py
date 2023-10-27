@@ -1,6 +1,7 @@
 import traceback
 import os 
-from dola_lp import update_history
+from dotenv import load_dotenv
+from scripts.defillama_prices import update_history
 import logging
 
 logging.basicConfig(level=logging.INFO,
@@ -9,9 +10,10 @@ logging.basicConfig(level=logging.INFO,
 
 try:
     db_url = os.getenv('PROD_DB')
-    
-    table_name = 'lp_history'
+
+    table_name = 'defillama_prices'
     update_history(db_url,table_name)
+
 
 except Exception as e:
     print(traceback.format_exc())

@@ -1,6 +1,7 @@
 import traceback
 import os 
-from scripts.dola_supply import create_current, create_history
+from dotenv import load_dotenv
+from scripts.blocks_daily import update_history
 import logging
 
 logging.basicConfig(level=logging.INFO,
@@ -9,12 +10,10 @@ logging.basicConfig(level=logging.INFO,
 
 try:
     db_url = os.getenv('PROD_DB')
+    table_name = 'defillama_prices'
     
-    #table_name = 'dola_supply_history'
-    #create_history(db_url,table_name)
+    update_history(db_url,table_name)
 
-    table_name = 'dola_supply_current'
-    create_current(db_url,table_name)
 
 except Exception as e:
     print(traceback.format_exc())

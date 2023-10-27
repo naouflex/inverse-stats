@@ -1,6 +1,6 @@
 import traceback
 import os 
-from dola_supply import update_history
+from scripts.dola_supply import update_history
 import logging
 
 logging.basicConfig(level=logging.INFO,
@@ -9,8 +9,8 @@ logging.basicConfig(level=logging.INFO,
 
 try:
     db_url = os.getenv('PROD_DB')
-    
     table_name = 'dola_supply_history'
+    
     update_history(db_url,table_name)
 
 except Exception as e:
