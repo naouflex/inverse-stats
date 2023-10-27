@@ -1,6 +1,6 @@
 import traceback
 import os 
-from dola_supply import create_current, create_history
+from scripts.dola_supply import create_current, create_history
 import logging
 
 logging.basicConfig(level=logging.INFO,

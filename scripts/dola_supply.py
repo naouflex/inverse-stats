@@ -36,7 +36,8 @@ def validate_keys(data):
         'contract_name': 'string',
         'account_type': 'string',
         'fed_type': 'string',
-        'formula': 'float64'
+        'formula': 'float64',
+        'formula_available': 'float64'
     }.items() if k in data.columns}
     
     for col, new_type in valid_keys.items():
@@ -73,6 +74,11 @@ def process_row(row, blocks,data,current):
             except Exception as e:
                 formula = 0
                 logger.info(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
+            try :
+                formula_available = evaluate_formula(row['formula_available'],w3,row['abi'],None,block_identifier,block_timestamp,current)
+            except Exception as e:
+                formula_available = 0
+                logger.info(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
             
             temp_data = {
                     'timestamp':block_timestamp,
@@ -85,7 +91,8 @@ def process_row(row, blocks,data,current):
                     'contract_name':row['contract_name'],
                     'account_type':row['account_type'],
                     'fed_type':row['fed_type'],
-                    'formula':formula
+                    'formula':formula,
+                    'formula_available':formula_available
                 }
 
             with lock:
@@ -94,7 +101,7 @@ def process_row(row, blocks,data,current):
         logger.info(f"Processed row {row['contract_name']} in {datetime.now() - contract_start_time}")
 
     except Exception as e:
-        logger.error(f"Error in processing row : {e} : {traceback.format_exc()} results : {formula}")
+        logger.error(f"Error in processing row : {e} : {traceback.format_exc()} results : {formula} / {formula_available}")
         pass
 
 def create_history(db_url,table_name):
@@ -205,7 +212,7 @@ def create_current(db_url,table_name):
             blocks_row = blocks[blocks['chain_name'] == row['chain_name_y']]
             #reshape with timestamp: date and chain_name_y: block_number
             blocks_row = blocks_row.rename(columns={'block_number': row['chain_name_y']})
-            blocks_row = blocks_row.drop_duplicates(subset=['timestamp', row['chain_name_x']], keep='last')
+            #blocks_row = blocks_row.drop_duplicates(subset=['timestamp', row['chain_name_x']], keep='last')
             
             # Update blocks_row so we can access bloxks_row['timestamp'] and blocks_row[row['chain_name_y']]
             blocks_row = blocks_row.set_index('timestamp')
