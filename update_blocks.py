@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO,
 
 try:
     db_url = os.getenv('PROD_DB')
-    table_name = 'defillama_prices'
+    table_name = 'blocks_daily'
     
     update_history(db_url,table_name)
 
