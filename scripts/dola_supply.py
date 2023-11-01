@@ -13,15 +13,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table
 from scripts.tools.formulae import evaluate_formula,build_methodology_table
-
+from scripts.tools.constants import SUPPLY_METHODOLOGY_URL,WEB3_PROVIDERS_URL
 logger = logging.getLogger(__name__)
 MAX_THREADS = 10
 
 lock = threading.Lock()
 load_dotenv()
 
-METHODOLOGY_URL = "https://app.inverse.watch/api/queries/492/results.json?api_key=8eH4yNtb6tYYbTWHskb5a4MrLbeccV93NdbFcg64"
-WEB3_PROVIDERS_URL = os.getenv("WEB3_PROVIDERS")
 
 
 def validate_keys(data):
@@ -107,7 +105,7 @@ def process_row(row, blocks,data,current):
 def create_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(SUPPLY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
 
         current = False        
@@ -141,7 +139,7 @@ def create_history(db_url,table_name):
 def update_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(SUPPLY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         current = False
         current_data = get_table(db_url,table_name)
@@ -198,7 +196,7 @@ def create_current(db_url,table_name):
     # save as above but only for the last_block_number
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(SUPPLY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_current')
         

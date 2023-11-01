@@ -13,14 +13,17 @@ from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
-def evaluate_operand(operand, w3, abi,prices, block_identifier, timestamp,current):
+def evaluate_operand(operand, abi,prices, block_identifier, timestamp,current):
     try:
         
         if operand is None or pd.isnull(operand) or operand == '':
             return 0
         
         #first we need to determine the type of the formula : if starts with 0x it's a contract call
-        if operand[0] == '0':
+        
+        if operand[0] == '#':
+            chain_id, contract = operand.split('$')
+            chain_id = chain_id[1:]
             contract, method = operand.split(':')
             method, argument = method.split('(')
             argument, indexes = argument.split(')')

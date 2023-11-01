@@ -12,17 +12,14 @@ from scripts.tools.database import (
     save_table, get_table, update_table, 
     remove_duplicates, drop_table, table_exists
 )
+from scripts.tools.constants import CHAIN_ID_MAP,PRICE_METHODOLOGY
 
 # Constants and configurations
 logger = logging.getLogger(__name__)
 MAX_THREADS = 10
 lock = threading.Lock()
 load_dotenv()
-CHAIN_ID_MAP = {
-    'ethereum': 1, 'bsc': 56, 'polygon': 137, 'fantom': 250, 
-    'optimism': 10, 'arbitrum': 42161, 'avax': 43114
-}
-PRICE_METHODOLOGY = "https://app.inverse.watch/api/queries/480/results.json?api_key=JY9REfUM3L7Ietj76qmQ2wFioz7k6GdCL6YqRxHG"
+
 
 def fetch_json(url):
     return requests.get(url).json()

@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO,
 
 try:
     db_url = os.getenv('PROD_DB')
-    table_name = 'defillama_current'
+    table_name = 'defillama_prices_current'
 
     create_current(db_url,table_name)
 

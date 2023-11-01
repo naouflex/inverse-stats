@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table, remove_duplicates
 from scripts.tools.formulae import evaluate_formula, build_methodology_table
-
+from scripts.tools.constants import FRONTIER_METHODOLOGY_URL,WEB3_PROVIDERS_URL
 logger = logging.getLogger(__name__)
 
 lock = threading.Lock()
@@ -21,8 +21,7 @@ MAX_THREADS = 10
 
 load_dotenv()
 
-METHODOLOGY_URL = "https://app.inverse.watch/api/queries/499/results.json?api_key=hPTTHXRhBI36YiK4UYrYzFA481GheipJLJ1ubIOA"
-WEB3_PROVIDERS_URL = os.getenv("WEB3_PROVIDERS")
+
 
 def validate_keys(data):
     valid_keys = {k: v for k, v in {
@@ -108,7 +107,7 @@ def process_row(row, prices, blocks,data,current):
 def create_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(FRONTIER_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
         prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
         
@@ -142,7 +141,7 @@ def create_history(db_url,table_name):
 def update_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(FRONTIER_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         current = False
         current_data = get_table(db_url,table_name)
@@ -200,7 +199,7 @@ def update_history(db_url,table_name):
 def create_current(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(FRONTIER_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
         blocks = get_table(os.getenv('PROD_DB'), 'blocks_current')
         prices = get_table(os.getenv('PROD_DB'), 'defillama_prices_current')
         
