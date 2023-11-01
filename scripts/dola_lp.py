@@ -60,6 +60,8 @@ def process_row(row, prices, blocks,data,current):
         
         #filter out blocks lower than row['start_block'] and NaN or None values
         blocks = blocks[blocks[row['chain_name_y']] >= row['start_block']]
+        blocks = blocks[blocks[row['chain_name_y']] <= row['stop_block']]
+        
         blocks = blocks[blocks[row['chain_name_y']].notnull()]
 
         for i in range(len(blocks)):

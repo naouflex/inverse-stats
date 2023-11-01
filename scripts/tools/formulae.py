@@ -9,6 +9,7 @@ import requests
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from decimal import Decimal
+from constants import WEB3_PROVIDERS_URL
 
 
 logger = logging.getLogger(__name__)
@@ -22,9 +23,9 @@ def evaluate_operand(operand, abi,prices, block_identifier, timestamp,current):
         #first we need to determine the type of the formula : if starts with 0x it's a contract call
         
         if operand[0] == '#':
+            dummy, chain_id = operand.split('#')
             chain_id, contract = operand.split('$')
-            chain_id = chain_id[1:]
-            contract, method = operand.split(':')
+            contract, method = contract.split(':')
             method, argument = method.split('(')
             argument, indexes = argument.split(')')
 
@@ -39,6 +40,10 @@ def evaluate_operand(operand, abi,prices, block_identifier, timestamp,current):
             else:
                 index1 = None
                 index2 = None
+            
+            web3_providers = requests.get(WEB3_PROVIDERS_URL).json()
+            web3_providers = pd.DataFrame(web3_providers['query_result']['data']['rows'])
+            w3 = Web3(Web3.HTTPProvider(web3_providers[web3_providers['chain_id'] == int(chain_id)]['rpc_url'].iloc[0]))
 
             if len(argument) ==42:
                 argument = w3.toChecksumAddress(argument)
