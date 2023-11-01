@@ -2,13 +2,14 @@ import traceback
 import os 
 from scripts.dola_supply import create_current
 import logging
+from scripts.tools.constants import PRODUCTION_DATABASE
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     handlers=[logging.StreamHandler()])
 
 try:
-    db_url = os.getenv('PROD_DB')
+    db_url = PRODUCTION_DATABASE
     table_name = 'dola_supply_current'
     
     create_current(db_url,table_name)

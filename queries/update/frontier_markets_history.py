@@ -2,6 +2,7 @@ import traceback
 import os 
 from scripts.frontier import update_history
 import logging
+from scripts.tools.constants import PRODUCTION_DATABASE
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -10,7 +11,7 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 try:
-    db_url = os.getenv('PROD_DB')
+    db_url = PRODUCTION_DATABASE
     table_name = 'frontier_markets_history'
     
     update_history(db_url,table_name)

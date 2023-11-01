@@ -1,3 +1,8 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 CHAIN_ID_MAP = {
     'ethereum': 1, 'bsc': 56, 'polygon': 137, 'fantom': 250, 
     'optimism': 10, 'arbitrum': 42161, 'avax': 43114
@@ -9,3 +14,4 @@ SUPPLY_METHODOLOGY_URL = "https://app.inverse.watch/api/queries/492/results.json
 FRONTIER_METHODOLOGY_URL = "https://app.inverse.watch/api/queries/499/results.json?api_key=hPTTHXRhBI36YiK4UYrYzFA481GheipJLJ1ubIOA"
 
 WEB3_PROVIDERS_URL = os.getenv("WEB3_PROVIDERS")
+PRODUCTION_DATABASE = os.getenv("PROD_DB")

@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table, remove_duplicates
 from scripts.tools.formulae import evaluate_formula, build_methodology_table
-from scripts.tools.constants import FRONTIER_METHODOLOGY_URL,WEB3_PROVIDERS_URL
+from scripts.tools.constants import FRONTIER_METHODOLOGY_URL, PRODUCTION_DATABASE,WEB3_PROVIDERS_URL
 logger = logging.getLogger(__name__)
 
 lock = threading.Lock()
@@ -108,8 +108,8 @@ def create_history(db_url,table_name):
     try:
         start_time = datetime.now()
         full_methodology = build_methodology_table(FRONTIER_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
-        blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
-        prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
+        blocks = get_table(PRODUCTION_DATABASE, 'blocks_daily')
+        prices = get_table(PRODUCTION_DATABASE, 'defillama_prices')
         
         current = False
         data = []
@@ -149,8 +149,8 @@ def update_history(db_url,table_name):
         # get latest timestamp and block_number for each contract in the db
         latest_blocks = current_data.groupby(['contract_address']).agg({'timestamp': 'max', 'block_number': 'max'}).reset_index()
 
-        blocks = get_table(os.getenv('PROD_DB'), 'blocks_daily')
-        prices = get_table(os.getenv('PROD_DB'), 'defillama_prices')
+        blocks = get_table(PRODUCTION_DATABASE, 'blocks_daily')
+        prices = get_table(PRODUCTION_DATABASE, 'defillama_prices')
         
         data = []
         row_list = []
@@ -200,8 +200,8 @@ def create_current(db_url,table_name):
     try:
         start_time = datetime.now()
         full_methodology = build_methodology_table(FRONTIER_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
-        blocks = get_table(os.getenv('PROD_DB'), 'blocks_current')
-        prices = get_table(os.getenv('PROD_DB'), 'defillama_prices_current')
+        blocks = get_table(PRODUCTION_DATABASE, 'blocks_current')
+        prices = get_table(PRODUCTION_DATABASE, 'defillama_prices_current')
         
         current = True
         data = []
