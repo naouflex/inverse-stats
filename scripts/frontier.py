@@ -69,12 +69,12 @@ def process_row(row, prices, blocks,data,current):
             if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
                 continue
             try :
-                formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp,current)
+                formulae_asset = evaluate_formula(row['formula_asset'],row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
                 formulae_asset = 0
                 logger.error(f"Error in evaluating formulae_asset : {e} : {traceback.format_exc()}")
             try:
-                formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp,current)
+                formulae_liability = evaluate_formula(row['formula_liability'],row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
                 formulae_liability = 0
                 logger.error(f"Error in evaluating formulae_liability : {e} : {traceback.format_exc()}")

@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table
 from scripts.tools.formulae import evaluate_formula, build_methodology_table
-from scripts.tools.constants import CHAIN_ID_MAP, PRODUCTION_DATABASE,WEB3_PROVIDERS_URL
+from scripts.tools.constants import CHAIN_ID_MAP, LP_METHODOLOGY_URL, PRODUCTION_DATABASE,WEB3_PROVIDERS_URL
 
 logger = logging.getLogger(__name__)
 
@@ -60,25 +60,24 @@ def process_row(row, prices, blocks,data,current):
         
         #filter out blocks lower than row['start_block'] and NaN or None values
         blocks = blocks[blocks[row['chain_name_y']] >= row['start_block']]
-        blocks = blocks[blocks[row['chain_name_y']] <= row['stop_block']]
         
-        blocks = blocks[blocks[row['chain_name_y']].notnull()]
-
+        if row['stop_block'] is not None:
+            blocks = blocks[blocks[row['chain_name_y']] <= row['stop_block']]
+        
         for i in range(len(blocks)):
             block_timestamp = blocks.iloc[i]['timestamp']
             block_identifier = blocks.iloc[i][row['chain_name_y']]
-
             if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
                 continue
 
             try :
-                formulae_asset = evaluate_formula(row['formula_asset'],w3,row['abi'],prices,block_identifier,block_timestamp,current)
+                formulae_asset = evaluate_formula(row['formula_asset'],row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
                 formulae_asset = 0
                 logger.error(f"Error in evaluating formula_asset : {e} : {traceback.format_exc()}")
 
             try:
-                formulae_liability = evaluate_formula(row['formula_liability'],w3,row['abi'],prices,block_identifier,block_timestamp,current)
+                formulae_liability = evaluate_formula(row['formula_liability'],row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
                 formulae_liability = 0
                 logger.error(f"Error in evaluating formula_liability : {e} : {traceback.format_exc()}")
@@ -206,7 +205,6 @@ def create_current(db_url,table_name):
 
         blocks = get_table(PRODUCTION_DATABASE, 'blocks_current')
         prices = get_table(PRODUCTION_DATABASE, 'defillama_prices_current')
-        
         current = True
         data = []
         row_list = []
@@ -229,7 +227,7 @@ def create_current(db_url,table_name):
             blocks_row['timestamp'] = blocks_row['timestamp'].astype(int)
 
             row_list.append((row,prices, blocks_row, data,current))
-
+        
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
             for row_data in row_list:
                 executor.submit(process_row, *row_data)

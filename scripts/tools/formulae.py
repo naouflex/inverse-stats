@@ -9,7 +9,7 @@ import requests
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from decimal import Decimal
-from constants import WEB3_PROVIDERS_URL
+from scripts.tools.constants import WEB3_PROVIDERS_URL
 
 
 logger = logging.getLogger(__name__)
@@ -23,8 +23,9 @@ def evaluate_operand(operand, abi,prices, block_identifier, timestamp,current):
         #first we need to determine the type of the formula : if starts with 0x it's a contract call
         
         if operand[0] == '#':
-            dummy, chain_id = operand.split('#')
+            
             chain_id, contract = operand.split('$')
+            chain_id = chain_id[1:]
             contract, method = contract.split(':')
             method, argument = method.split('(')
             argument, indexes = argument.split(')')
@@ -44,6 +45,7 @@ def evaluate_operand(operand, abi,prices, block_identifier, timestamp,current):
             web3_providers = requests.get(WEB3_PROVIDERS_URL).json()
             web3_providers = pd.DataFrame(web3_providers['query_result']['data']['rows'])
             w3 = Web3(Web3.HTTPProvider(web3_providers[web3_providers['chain_id'] == int(chain_id)]['rpc_url'].iloc[0]))
+            w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 
             if len(argument) ==42:
                 argument = w3.toChecksumAddress(argument)
@@ -155,7 +157,7 @@ def shunting_yard_infix_to_postfix(parts):
     return output
 
 # Evaluate postfix expression
-def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp,current):
+def evaluate_postfix(postfix, abi, prices, block_identifier, block_timestamp,current):
     stack = []
     for element in postfix:
         if element in ['+', '-', '*', '/']:
@@ -163,11 +165,11 @@ def evaluate_postfix(postfix, w3,abi, prices, block_identifier, block_timestamp,
             operand1 = stack.pop()
             stack.append(apply_operator(element, operand1, operand2))
         else:
-            stack.append(evaluate_operand(element, w3,abi, prices, block_identifier, block_timestamp,current))
+            stack.append(evaluate_operand(element,abi, prices, block_identifier, block_timestamp,current))
     return stack[0]
 
 # Evaluate formula
-def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp,current):
+def evaluate_formula(string,abi,prices,block_identifier,block_timestamp,current):
     if string is None or pd.isnull(string) or string == '':
         return None
     
@@ -179,7 +181,7 @@ def evaluate_formula(string,w3,abi,prices,block_identifier,block_timestamp,curre
     postfix = shunting_yard_infix_to_postfix(parts)
     
     # Evaluate the postfix expression
-    return evaluate_postfix(postfix, w3, abi,prices, block_identifier, block_timestamp,current)
+    return evaluate_postfix(postfix, abi,prices, block_identifier, block_timestamp,current)
 
 
 def build_methodology_table(methodology_url,web3_providers_url):

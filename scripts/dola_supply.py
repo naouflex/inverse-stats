@@ -68,12 +68,12 @@ def process_row(row, blocks,data,current):
                 continue
 
             try :
-                formula = evaluate_formula(row['formula'],w3,row['abi'],None,block_identifier,block_timestamp,current)
+                formula = evaluate_formula(row['formula'],row['abi'],None,block_identifier,block_timestamp,current)
             except Exception as e:
                 formula = 0
                 logger.info(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
             try :
-                formula_available = evaluate_formula(row['formula_available'],w3,row['abi'],None,block_identifier,block_timestamp,current)
+                formula_available = evaluate_formula(row['formula_available'],row['abi'],None,block_identifier,block_timestamp,current)
             except Exception as e:
                 formula_available = 0
                 logger.info(f"Error in evaluating formula : {e} : {traceback.format_exc()}")

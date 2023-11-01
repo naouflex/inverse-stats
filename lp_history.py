@@ -5,10 +5,10 @@ from scripts.tools.constants import PRODUCTION_DATABASE,logger
 
 try:
     db_url = PRODUCTION_DATABASE
-    table_name = 'lp_history'
+    table_name = 'lp_history_sfasf'
     
-    create_history(db_url,table_name)
+    create_current(db_url,table_name)
 
 
 except Exception as e:
-    print(traceback.format_exc())
+    logger.error(traceback.format_exc())
