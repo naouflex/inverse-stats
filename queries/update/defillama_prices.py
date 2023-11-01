@@ -2,12 +2,7 @@ import traceback
 import os 
 from dotenv import load_dotenv
 from scripts.defillama_prices import update_history
-import logging
-from scripts.tools.constants import PRODUCTION_DATABASE
-
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    handlers=[logging.StreamHandler()])
+from scripts.tools.constants import PRODUCTION_DATABASE,logger
 
 try:
     db_url = PRODUCTION_DATABASE

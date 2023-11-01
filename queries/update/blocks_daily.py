@@ -2,16 +2,11 @@ import traceback
 import os 
 from dotenv import load_dotenv
 from scripts.blocks_daily import update_history
-import logging
-from scripts.tools.constants import PRODUCTION_DATABASE
-
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    handlers=[logging.StreamHandler()])
+from scripts.tools.constants import PRODUCTION_DATABASE,logger
 
 try:
     db_url = PRODUCTION_DATABASE
-    table_name = 'blocks_daily'
+    table_name = 'blocks_daily_test2'
     
     update_history(db_url,table_name)
 
