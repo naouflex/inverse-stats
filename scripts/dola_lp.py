@@ -17,6 +17,9 @@ from scripts.tools.constants import CHAIN_ID_MAP, LP_METHODOLOGY_URL, PRODUCTION
 
 logger = logging.getLogger(__name__)
 
+table_description = "This table contains the DOLA LP data for each LP contract in the methodology table. The data is updated daily."
+table_description_current = "This table contains the DOLA LP data for each LP contract in the methodology table. The data is updated daily."
+
 MAX_THREADS = 10
 
 lock = threading.Lock()
@@ -135,7 +138,7 @@ def create_history(db_url,table_name):
         # Filter out any keys not in DataFrame columns
         validate_keys(data)
 
-        save_table(db_url,table_name,data)
+        save_table(db_url,table_name,table_description,data)
 
         logger.info(f"Total execution time: {datetime.now() - start_time}")
         
@@ -240,7 +243,7 @@ def create_current(db_url,table_name):
 
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
-        save_table(db_url,table_name,data)
+        save_table(db_url,table_name,table_description_current,data)
 
         logger.info(f"Total execution time: {datetime.now() - start_time}")
         

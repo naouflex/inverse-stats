@@ -21,6 +21,9 @@ MAX_THREADS = 10
 
 load_dotenv()
 
+table_description = "This table contains the historical data for the Frontier Protocol"
+table_description_current = "This table contains the current data for the Frontier Protocol"
+
 
 
 def validate_keys(data):
@@ -130,7 +133,7 @@ def create_history(db_url,table_name):
 
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
-        save_table(db_url,table_name,data)
+        save_table(db_url,table_name,table_description,data)
 
         logger.info(f"Total execution time: {datetime.now() - start_time}")
         
@@ -236,7 +239,7 @@ def create_current(db_url,table_name):
 
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
-        save_table(db_url,table_name,data)
+        save_table(db_url,table_name,table_description_current, data)
 
         logger.info(f"Total execution time: {datetime.now() - start_time}")
         

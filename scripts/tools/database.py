@@ -48,41 +48,28 @@ def map_dtype(dtype):
         return 0
 
 
-def create_table_from_df(engine, table_name, df):
+def create_table_from_df(engine, table_name,table_description, df):
     try:
         meta = MetaData()
-        
-        columns = []
-        for col in df.columns:
-            dtype_mapped = map_dtype(df[col].dtype)
-            if dtype_mapped == 0:  # This means our mapping failed
-                logger.warning(f"Mapping failed for column '{col}' with dtype '{df[col].dtype}'.")
-                continue  # Skip adding this column
-            columns.append(Column(col, dtype_mapped))
-        
-        if not columns:  # If no columns are mapped correctly
-            logger.warning(f"No columns were successfully mapped for table '{table_name}'. Check your data.")
-            return
-        
-        table = Table(table_name, meta, *columns)
+        columns = [Column(col, map_dtype(df[col].dtype)) for col in df.columns]
+        table = Table(table_name, meta, *columns, comment=table_description)
         table.create(engine)
-        logger.info(f"Successfully created table info for {table_name}")
-        
+        logger.info(f"Successfully created table {table_name}")
     except sqla_exc.SQLAlchemyError as e:
         logger.error(f"SQLAlchemy error occurred: {e}")
         logger.error(traceback.format_exc())
-        
     except Exception as e:
         logger.error(f"An error occurred: {e}")
         logger.error(traceback.format_exc())
 
-def save_table(db_url, table_name, df):
+def save_table(db_url, table_name,table_description, df):
     engine = create_engine(db_url)
     df = pd.DataFrame(df)
+    table_description = 'placeholder'
 
     try:
         if not table_exists(db_url, table_name):
-            create_table_from_df(engine, table_name, df)
+            create_table_from_df(engine, table_name, table_description,df)
 
         buffer = io.StringIO()
         df.to_csv(buffer, index=False, header=False)
