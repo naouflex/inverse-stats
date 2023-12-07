@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 import traceback
 import requests
 import pandas as pd
@@ -22,7 +23,10 @@ load_dotenv()
 
 
 def fetch_json(url):
-    return requests.get(url).json()
+    try:
+        return requests.get(url).json()
+    except Exception:
+        logger.error(f"Failed to fetch data from {url}")
 
 def validate_keys(data):
     valid_keys = {
@@ -47,9 +51,18 @@ def fetch_token_data(chain_slug, contract_address):
     url = f"https://coins.llama.fi/prices/first/{chain_slug}:{contract_address}"
     return fetch_json(url)
 
-def fetch_chart_data(chain_slug, contract_address, end_timestamp, days):
-    url = f"https://coins.llama.fi/chart/{chain_slug}:{contract_address}?end={end_timestamp}&span={days}&period=1d"
-    return fetch_json(url)
+def fetch_chart_data(chain_slug, contract_address, end_timestamp, days, max_retry=3, timeout=5):
+    try:        
+        url = f"https://coins.llama.fi/chart/{chain_slug}:{contract_address}?end={end_timestamp}&span={days}&period=1d"
+        return fetch_json(url)
+    except Exception:
+        if max_retry > 0:
+            logger.error(f"Retrying {max_retry} more times for {chain_slug}:{contract_address}")
+            time.sleep(timeout)
+            return fetch_chart_data(chain_slug, contract_address, end_timestamp, days, max_retry=max_retry-1)
+        else:
+            logger.error(f"Failed to fetch chart data for {chain_slug}:{contract_address}")
+            logger.error(traceback.format_exc())
 
 def fetch_and_update_data(token_info, data):
     try:

@@ -6,9 +6,9 @@ from scripts.tools.constants import PRODUCTION_DATABASE,logger
 
 try:
     db_url = PRODUCTION_DATABASE
-    table_name = 'defillama_prices_ghuy'
+    table_name = 'defillama_prices'
 
-    create_current(db_url,table_name)
+    create_history(db_url,table_name)
 
 except Exception as e:
     logger.info(traceback.format_exc())

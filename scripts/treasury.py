@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table
 from scripts.tools.formulae import evaluate_formula, build_methodology_table
-from scripts.tools.constants import CHAIN_ID_MAP, LP_METHODOLOGY_URL, PRODUCTION_DATABASE,WEB3_PROVIDERS_URL
+from scripts.tools.constants import CHAIN_ID_MAP, TREASURY_METHODOLOGY_URL, PRODUCTION_DATABASE,WEB3_PROVIDERS_URL
 
 logger = logging.getLogger(__name__)
 
@@ -27,18 +27,13 @@ def validate_keys(data):
         valid_keys = {k: v for k, v in {
             'timestamp': 'Int64', 
             'block_number': 'Int64',
-            'account_id': 'Int64',
             'chain_id': 'Int64',
             'chain_name_x': 'string',
             'contract_address': 'string',
-            'protocol': 'string',
             'contract_name': 'string',
             'account_type': 'string',
-            'collateral_type': 'string',
-            'lp_type': 'string',
-            'fed_address': 'string',
-            'formula_asset': 'float64',
-            'formula_liability': 'float64'
+            'formula': 'float64',
+            'formula_usd': 'float64'
         }.items() if k in data.columns}
 
         for col, new_type in valid_keys.items():
@@ -61,42 +56,37 @@ def process_row(row, prices, blocks,data,current):
         #filter out blocks lower than row['start_block'] and NaN or None values
         blocks = blocks[blocks[row['chain_name_y']] >= row['start_block']]
         
-        if row['stop_block'] is not None:
-            blocks = blocks[blocks[row['chain_name_y']] <= row['stop_block']]
-        
+
         for i in range(len(blocks)):
             block_timestamp = blocks.iloc[i]['timestamp']
             block_identifier = blocks.iloc[i][row['chain_name_y']]
+            
+            
             if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
                 continue
 
             try :
-                formulae_asset = evaluate_formula(row['formula_asset'],row['abi'],prices,block_identifier,block_timestamp,current)
+                formula = evaluate_formula(row['formula'],row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
-                formulae_asset = 0
-                logger.error(f"Error in evaluating formula_asset : {e} : {traceback.format_exc()}")
+                formula = 0
+                logger.error(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
 
             try:
-                formulae_liability = evaluate_formula(row['formula_liability'],row['abi'],prices,block_identifier,block_timestamp,current)
+                formula_usd = evaluate_formula(row['formula_usd'],row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
-                formulae_liability = 0
-                logger.error(f"Error in evaluating formula_liability : {e} : {traceback.format_exc()}")
+                formula_usd = 0
+                logger.error(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
             
             temp_data = {
                     'timestamp':block_timestamp,
                     'block_number':block_identifier,
-                    'account_id':row['account_id'],
                     'chain_id':row['chain_id'],
                     'chain_name_x':row['chain_name_x'],
                     'contract_address':row['contract_address'],
-                    'protocol':row['protocol'],
                     'contract_name':row['contract_name'],
                     'account_type':row['account_type'],
-                    'collateral_type':row['collateral_type'],
-                    'lp_type':row['lp_type'],
-                    'fed_address':row['fed_address'],
-                    'formula_asset':formulae_asset,
-                    'formula_liability':formulae_liability
+                    'formula':formula,
+                    'formula_usd':formula_usd
                 }
 
             with lock:
@@ -105,13 +95,13 @@ def process_row(row, prices, blocks,data,current):
         logger.info(f"Processed row {row['contract_name']} in {datetime.now() - contract_start_time}")
 
     except Exception as e:
-        logger.error(f"Error in processing row : {e} : {traceback.format_exc()} results : {formulae_asset} : {formulae_liability}")
+        logger.error(f"Error in processing row : {e} : {traceback.format_exc()} results : {formula} : {formula_usd}")
         pass
 
 def create_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(LP_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(TREASURY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         blocks = get_table(PRODUCTION_DATABASE, 'blocks_daily')
         prices = get_table(PRODUCTION_DATABASE, 'defillama_prices')
@@ -134,8 +124,10 @@ def create_history(db_url,table_name):
 
         # Filter out any keys not in DataFrame columns
         validate_keys(data)
+
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
+            
         save_table(db_url,table_name,data)
 
         logger.info(f"Total execution time: {datetime.now() - start_time}")
@@ -147,7 +139,7 @@ def create_history(db_url,table_name):
 def update_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(LP_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(TREASURY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         current_data = get_table(db_url,table_name)
         # get latest timestamp and block_number for each contract in the db
@@ -202,7 +194,7 @@ def create_current(db_url,table_name):
     # save as above but only for the last_block_number
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(LP_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(TREASURY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         blocks = get_table(PRODUCTION_DATABASE, 'blocks_current')
         prices = get_table(PRODUCTION_DATABASE, 'defillama_prices_current')
@@ -226,6 +218,7 @@ def create_current(db_url,table_name):
             blocks_row['timestamp'] = start_time.timestamp()
             # make sure the timestamp is an int
             blocks_row['timestamp'] = blocks_row['timestamp'].astype(int)
+            
 
             row_list.append((row,prices, blocks_row, data,current))
         
