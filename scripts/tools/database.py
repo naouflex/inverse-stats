@@ -11,7 +11,9 @@ logger = logging.getLogger(__name__)
 def table_exists(db_url, table_name):
     try:
         engine = create_engine(db_url)
-        return engine.dialect.has_table(engine.connect(), table_name)
+        query = f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{table_name}')"
+        result = engine.execute(query).scalar()
+        return result
     except:
         return False
 
@@ -48,7 +50,7 @@ def map_dtype(dtype):
         return 0
 
 
-def create_table_from_df(engine, table_name,table_description, df):
+def create_table_from_df(engine, table_name, df,table_description='placeholder'):
     try:
         meta = MetaData()
         columns = [Column(col, map_dtype(df[col].dtype)) for col in df.columns]
@@ -62,14 +64,13 @@ def create_table_from_df(engine, table_name,table_description, df):
         logger.error(f"An error occurred: {e}")
         logger.error(traceback.format_exc())
 
-def save_table(db_url, table_name,table_description, df):
+def save_table(db_url, table_name, df,table_description="placeholder"):
     engine = create_engine(db_url)
     df = pd.DataFrame(df)
-    table_description = 'placeholder'
 
     try:
         if not table_exists(db_url, table_name):
-            create_table_from_df(engine, table_name, table_description,df)
+            create_table_from_df(engine, table_name, df,table_description)
 
         buffer = io.StringIO()
         df.to_csv(buffer, index=False, header=False)

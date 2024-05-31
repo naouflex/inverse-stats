@@ -63,7 +63,7 @@ def evaluate_operand(operand, abi,prices, block_identifier, timestamp,current):
                     result = result[index1]
                     if index2 is not None:
                         result = result[index2]
-                        #logger.info(f"Call result : {result}")
+                        logger.info(f"Call result : {result}")
                 return result        
             except Exception as e:
                 logger.info(f"Error in evaluating method: {operand} : {e}")
@@ -203,4 +203,6 @@ def build_methodology_table(methodology_url,web3_providers_url):
     
     except Exception as e:
         logger.error(f"Error in getting methodology : {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return None

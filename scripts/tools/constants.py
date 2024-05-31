@@ -23,5 +23,5 @@ FRONTIER_METHODOLOGY_URL = "https://app.inverse.watch/api/queries/499/results.js
 MCAP_METHODOLOGY_URL = "https://app.inverse.watch/api/queries/547/results.json?api_key=6vNIRr3Im4IFKmyweEX0uTBTJvWe4lQpItmjrdXp"
 TREASURY_METHODOLOGY_URL = "https://app.inverse.watch/api/queries/548/results.json?api_key=XiugsXqyRbVuqhltHfUHteOLMsXYDEZd4ESHwpoI"
 
-WEB3_PROVIDERS_URL = os.getenv("WEB3_PROVIDERS")
+WEB3_PROVIDERS_URL = "https://app.inverse.watch/api/queries/467/results.json?api_key=vX3BktSCzAW4jzpjeR3hvqjAAJ2zJb5dXAxwaqCa"
 PRODUCTION_DATABASE = os.getenv("PROD_DB")

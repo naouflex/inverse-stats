@@ -27,6 +27,8 @@ def fetch_json(url):
         return requests.get(url).json()
     except Exception:
         logger.error(f"Failed to fetch data from {url}")
+        #return error message from API
+        logger.error(requests.get(url).text)
 
 def validate_keys(data):
     valid_keys = {
@@ -150,7 +152,7 @@ def create_history(db_url, table_name):
 
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
-        save_table(db_url, table_name,table_description, df)
+        save_table(db_url, table_name, df)
         remove_duplicates(db_url, table_name, ['timestamp', 'chain_id', 'token_address'], 'last_updated')
         logger.info(f"Total time: {datetime.now() - start_time}")
     except Exception:
@@ -167,7 +169,7 @@ def create_current(db_url, table_name):
 
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
-        save_table(db_url, table_name,table_description_current, df)
+        save_table(db_url, table_name, df)
         logger.info(f"Total time: {datetime.now() - start_time}")
     except Exception:
         logger.error(f"Error in creating current price table : {traceback.format_exc()}")
@@ -187,7 +189,7 @@ def update_history(db_url, table_name):
 
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
-        save_table(db_url, table_name,table_description, df)
+        save_table(db_url, table_name, df)
         remove_duplicates(db_url, table_name, ['timestamp', 'chain_id', 'token_address'], 'last_updated')
         logger.info(f"Total time: {datetime.now() - start_time}")
     except Exception:

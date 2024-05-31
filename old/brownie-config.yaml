@@ -1,0 +1,21 @@
+networks:
+  mainnet-quicknode:
+    name: Mainnet (Quicknode)
+    chainid: 1
+    id: mainnet-quicknode
+    host: $RPC_URL
+    explorer: https://api.etherscan.io/api
+    multicall2: "0x5BA1e12693Dc8F9c48aAD8770482f4739bEeD696"
+  test-fork:
+  -  cmd: ganache-cli
+     cmd_settings:
+       fork: mainnet-quicknode
+       port: 8545
+       gas_limit: 20000000
+       accounts: 10
+       evm_version: shanghai
+       mnemonic: brownie
+     host: http://127.0.0.1
+     timeout: 120
+
+```

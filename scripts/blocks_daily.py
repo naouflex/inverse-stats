@@ -50,7 +50,7 @@ def create_history(db_url, table_name, start_date, end_date=None):
         if table_exists(db_url, table_name):
             logger.warning(f"Table already exists, changing new table name to {table_name}_new")
             table_name = f"{table_name}_new"
-        save_table(db_url, table_name,table_description, block_table)
+        save_table(db_url, table_name, block_table, 'Contains the block number of each chain')
         logger.info(f"Create Block Table - Time elapsed: {datetime.now() - start_time}")
     except Exception as e:
         logger.error(f"Cannot create block table: {e}")
@@ -80,7 +80,7 @@ def create_current(db_url, table_name):
         block_table = manage_data(web3_providers)
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
-        save_table(db_url, table_name,table_description_current, block_table)
+        save_table(db_url, table_name,block_table,'')
         logger.info(f"Create Current Block Table - Time elapsed: {datetime.now() - start_time}")
     except Exception as e:
         logger.error(f"Cannot create block table: {e}")

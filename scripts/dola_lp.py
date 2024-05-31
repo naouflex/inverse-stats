@@ -101,6 +101,7 @@ def process_row(row, prices, blocks,data,current):
                     'formula_asset':formulae_asset,
                     'formula_liability':formulae_liability
                 }
+            print(temp_data)
 
             with lock:
                 data.append(temp_data)
@@ -244,7 +245,7 @@ def create_current(db_url,table_name):
 
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
-        save_table(db_url,table_name,table_description_current,data)
+        save_table(db_url,table_name,data,'')
 
         logger.info(f"Total execution time: {datetime.now() - start_time}")
         
