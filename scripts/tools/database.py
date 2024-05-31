@@ -11,9 +11,8 @@ logger = logging.getLogger(__name__)
 def table_exists(db_url, table_name):
     try:
         engine = create_engine(db_url)
-        query = f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{table_name}')"
-        result = engine.execute(query).scalar()
-        return result
+        
+        return engine.dialect.has_table(engine.connect(), table_name)
     except:
         return False
 
