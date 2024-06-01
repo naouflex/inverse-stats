@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from web3.middleware import geth_poa_middleware
 from scripts.tools.chainkit import get_blocks_by_date_range
-from scripts.tools.database import save_table, get_table, update_table, table_exists, drop_table
+from scripts.tools.database import replace_table, save_table, get_table, update_table, table_exists, drop_table
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -50,10 +50,35 @@ def create_history(db_url, table_name, start_date, end_date=None):
         if table_exists(db_url, table_name):
             logger.warning(f"Table already exists, changing new table name to {table_name}_new")
             table_name = f"{table_name}_new"
+
+        # make sure the same dates are on the same line
+        block_table = block_table.groupby('timestamp').max().reset_index()
+
         save_table(db_url, table_name, block_table, 'Contains the block number of each chain')
         logger.info(f"Create Block Table - Time elapsed: {datetime.now() - start_time}")
     except Exception as e:
         logger.error(f"Cannot create block table: {e}")
+
+def append_history_with_columns(db_url, table_name, start_date, end_date=None, chain_name='base'):
+    try:
+        start_time = datetime.now()
+        web3_providers = get_rpc_table()
+        # filter for chain_name = base
+        web3_providers = web3_providers[web3_providers['chain_name'] == chain_name]
+        if end_date is None:
+            end_date = datetime.now().strftime("%Y-%m-%d 00:00:00")
+        block_table = manage_data(web3_providers, start_date, end_date)
+        block_table = block_table.rename(columns={'block_number': chain_name})
+        #now we only add the column by merging on the timestamp
+        current_data = get_table(db_url, table_name)
+        current_data['timestamp'] = pd.to_datetime(current_data['timestamp'])
+        block_table['timestamp'] = pd.to_datetime(block_table['timestamp'])
+        block_table = pd.merge(current_data, block_table, on='timestamp', how='outer')
+        #replace the old table with the new one
+        replace_table(db_url, table_name, block_table, 'Contains the block number of each chain')
+        logger.info(f"Append Block Table - Time elapsed: {datetime.now() - start_time}")
+    except Exception as e:
+        logger.error(f"Cannot append block table: {e}")
 
 def update_history(db_url, table_name, end_date=None):
     try:
@@ -68,6 +93,9 @@ def update_history(db_url, table_name, end_date=None):
             end_date = datetime.now().strftime("%Y-%m-%d 00:00:00")
         web3_providers = get_rpc_table()
         block_table = manage_data(web3_providers, last_date, end_date)
+        # make sure the same dates are on the same line
+        block_table = block_table.groupby('timestamp').max().reset_index()
+        
         update_table(db_url, table_name, block_table)
         logger.info(f"Update Block Table - Time elapsed: {datetime.now() - start_time}")
     except Exception as e:

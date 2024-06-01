@@ -69,7 +69,7 @@ def save_table(db_url, table_name, df,table_description="placeholder"):
 
     try:
         if not table_exists(db_url, table_name):
-            create_table_from_df(engine, table_name, df,table_description)
+            create_table_from_df(engine, table_name, df, table_description)
 
         buffer = io.StringIO()
         df.to_csv(buffer, index=False, header=False)
@@ -114,6 +114,27 @@ def get_table(db_url, table_name):
         df = pd.DataFrame(results, columns=table.columns.keys())
         logger.info(f"Successfully read {len(df)} rows from {table_name}")
         return df
+
+def replace_table(db_url, table_name, df,table_description='placeholder'):
+    engine = create_engine(db_url)
+    df = pd.DataFrame(df)
+
+    try:
+        if not table_exists(db_url, table_name):
+            create_table_from_df(engine, table_name, df, table_description)
+        else:
+            table = Table(table_name, MetaData(), autoload_with=engine)
+            table.drop(engine)
+            create_table_from_df(engine, table_name, df, table_description)
+
+        save_table(db_url, table_name, df)
+
+    except sqla_exc.SQLAlchemyError as e:
+        logger.error(f"SQLAlchemy error occurred: {e}")
+        logger.error(traceback.format_exc())
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+        logger.error(traceback.format_exc())
 
 def update_table(db_url, table_name,df):
     engine = create_engine(db_url)
