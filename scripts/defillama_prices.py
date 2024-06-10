@@ -17,7 +17,7 @@ from scripts.tools.constants import CHAIN_ID_MAP,PRICE_METHODOLOGY
 
 # Constants and configurations
 logger = logging.getLogger(__name__)
-MAX_THREADS = 10
+MAX_THREADS = 1
 lock = threading.Lock()
 load_dotenv()
 
@@ -27,8 +27,10 @@ def fetch_json(url):
         return requests.get(url).json()
     except Exception:
         logger.error(f"Failed to fetch data from {url}")
-        #return error message from API
+        #return error title from API
         logger.error(requests.get(url).text)
+        #extract title from error
+        logger.error(requests.get(url).json()['title'])
 
 def validate_keys(data):
     valid_keys = {
@@ -150,10 +152,9 @@ def create_history(db_url, table_name):
 
         df = process_dataframe(data, current=False)
 
-        if table_exists(db_url, table_name):
-            drop_table(db_url, table_name)
         save_table(db_url, table_name, df)
         remove_duplicates(db_url, table_name, ['timestamp', 'chain_id', 'token_address'], 'last_updated')
+
         logger.info(f"Total time: {datetime.now() - start_time}")
     except Exception:
         logger.error(f"Error in creating historical price table : {traceback.format_exc()}")
@@ -187,8 +188,6 @@ def update_history(db_url, table_name):
 
         df = process_dataframe(data, current=False)
 
-        if table_exists(db_url, table_name):
-            drop_table(db_url, table_name)
         save_table(db_url, table_name, df)
         remove_duplicates(db_url, table_name, ['timestamp', 'chain_id', 'token_address'], 'last_updated')
         logger.info(f"Total time: {datetime.now() - start_time}")
