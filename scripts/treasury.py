@@ -125,9 +125,6 @@ def create_history(db_url,table_name):
         # Filter out any keys not in DataFrame columns
         validate_keys(data)
 
-        if table_exists(db_url, table_name):
-            drop_table(db_url, table_name)
-            
         save_table(db_url,table_name,data)
 
         logger.info(f"Total execution time: {datetime.now() - start_time}")

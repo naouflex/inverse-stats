@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table
 from scripts.tools.formulae import evaluate_formula, build_methodology_table
-from scripts.tools.constants import CHAIN_ID_MAP, MCAP_METHODOLOGY_URL, PRODUCTION_DATABASE,WEB3_PROVIDERS_URL
+from scripts.tools.constants import CHAIN_ID_MAP, TREASURY_METHODOLOGY_URL, PRODUCTION_DATABASE,WEB3_PROVIDERS_URL
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def process_row(row, prices, blocks,data,current):
                 formula_usd = evaluate_formula(row['formula_usd'],row['abi'],prices,block_identifier,block_timestamp,current)
             except Exception as e:
                 formula_usd = 0
-                logger.error(f"Error in evaluating formula_usd : {e} : {traceback.format_exc()}")
+                logger.error(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
             
             temp_data = {
                     'timestamp':block_timestamp,
@@ -101,7 +101,7 @@ def process_row(row, prices, blocks,data,current):
 def create_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(MCAP_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(TREASURY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         blocks = get_table(PRODUCTION_DATABASE, 'blocks_daily')
         prices = get_table(PRODUCTION_DATABASE, 'defillama_prices')
@@ -136,7 +136,7 @@ def create_history(db_url,table_name):
 def update_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(MCAP_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(TREASURY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         current_data = get_table(db_url,table_name)
         # get latest timestamp and block_number for each contract in the db
@@ -191,7 +191,7 @@ def create_current(db_url,table_name):
     # save as above but only for the last_block_number
     try:
         start_time = datetime.now()
-        full_methodology = build_methodology_table(MCAP_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        full_methodology = build_methodology_table(TREASURY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
 
         blocks = get_table(PRODUCTION_DATABASE, 'blocks_current')
         prices = get_table(PRODUCTION_DATABASE, 'defillama_prices_current')

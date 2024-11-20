@@ -1,195 +1,242 @@
-import os
-import logging
-import time
-import traceback
+import threading
 import requests
 import pandas as pd
-import threading
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+import traceback
+import logging
+import os
+
+from web3 import Web3
+from datetime import datetime
 from dotenv import load_dotenv
+from web3.middleware import geth_poa_middleware
+from concurrent.futures import ThreadPoolExecutor
 
-from scripts.tools.database import (
-    save_table, get_table, update_table, 
-    remove_duplicates, drop_table, table_exists
-)
-from scripts.tools.constants import CHAIN_ID_MAP,PRICE_METHODOLOGY
-
-# Constants and configurations
+from scripts.tools.database import drop_table, save_table, get_table, table_exists,update_table
+from scripts.tools.formulae import evaluate_formula,build_methodology_table
+from scripts.tools.constants import PRODUCTION_DATABASE, SUPPLY_METHODOLOGY_URL,WEB3_PROVIDERS_URL
 logger = logging.getLogger(__name__)
-MAX_THREADS = 1
+MAX_THREADS = 10
+
 lock = threading.Lock()
 load_dotenv()
 
 
-def fetch_json(url):
-    try:
-        return requests.get(url).json()
-    except Exception:
-        logger.error(f"Failed to fetch data from {url}")
-        #return error title from API
-        logger.error(requests.get(url).text)
-        #extract title from error
-        logger.error(requests.get(url).json()['title'])
 
 def validate_keys(data):
-    valid_keys = {
-        'timestamp': 'Int64',
-        'chain': 'string',
+    valid_keys = {k: v for k, v in {
+        'timestamp': 'Int64', 
+        'block_number': 'Int64',
+        'account_id': 'Int64',
         'chain_id': 'Int64',
-        'token_address': 'string',
-        'price': 'float64',
-        'confidence': 'float64',
-        'symbol': 'string',
-        'decimals': 'Int64',
-        'last_updated': 'datetime64[ns]'
-    }
+        'chain_name_x': 'string',
+        'contract_address': 'string',
+        'protocol': 'string',
+        'contract_name': 'string',
+        'account_type': 'string',
+        'fed_type': 'string',
+        'formula': 'float64',
+        'formula_available': 'float64'
+    }.items() if k in data.columns}
+    
     for col, new_type in valid_keys.items():
-        if col in data.columns:
-            try:
-                data[col] = data[col].astype(new_type)
-            except TypeError:
-                logger.error(f"Failed to cast column {col} to {new_type}")
+        try:
+            data[col] = data[col].astype(new_type)
+        except TypeError:
+            logger.error(f"Failed to cast column {col} to {new_type}")
+            pass
+    return
 
-def fetch_token_data(chain_slug, contract_address):
-    url = f"https://coins.llama.fi/prices/first/{chain_slug}:{contract_address}"
-    return fetch_json(url)
-
-def fetch_chart_data(chain_slug, contract_address, end_timestamp, days, max_retry=3, timeout=5):
-    try:        
-        url = f"https://coins.llama.fi/chart/{chain_slug}:{contract_address}?end={end_timestamp}&span={days}&period=1d"
-        return fetch_json(url)
-    except Exception:
-        if max_retry > 0:
-            logger.error(f"Retrying {max_retry} more times for {chain_slug}:{contract_address}")
-            time.sleep(timeout)
-            return fetch_chart_data(chain_slug, contract_address, end_timestamp, days, max_retry=max_retry-1)
-        else:
-            logger.error(f"Failed to fetch chart data for {chain_slug}:{contract_address}")
-            logger.error(traceback.format_exc())
-
-def fetch_and_update_data(token_info, data):
+def process_row(row, blocks,data,current):
     try:
-        chain_slug, contract_address = token_info['chain_slug'], token_info['contract_address']
-        token_data = fetch_token_data(chain_slug, contract_address)
+        #blocks_row is a pd series
+        contract_start_time = datetime.now()
+
+        # get web3 and inject middle ware for PoA chains
+        w3 = Web3(Web3.HTTPProvider(row['rpc_url']))
+        w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         
-        # check if token_info['timestamp'] exists and prevent KeyError if it doesn't
-        if 'timestamp' in token_info:
-            start_timestamp = int(token_info['timestamp']) + 86400
-        else:
-            start_timestamp = int(token_data["coins"][f"{chain_slug}:{contract_address}"]['timestamp'])
-            start_timestamp = int(datetime.utcfromtimestamp(start_timestamp).replace(hour=0, minute=0, second=0).timestamp())
+        #filter out blocks lower than row['start_block'] and NaN or None values
+        blocks = blocks[blocks[row['chain_name_y']] >= row['start_block']]
+        blocks = blocks[blocks[row['chain_name_y']].notnull()]
 
-        end_timestamp = int(datetime.utcnow().replace(hour=0, minute=0, second=0).timestamp())
-        days_since_start = (datetime.utcfromtimestamp(end_timestamp) - datetime.utcfromtimestamp(start_timestamp)).days
-        token_info.update({'timestamp': start_timestamp, 'days': days_since_start})
-        chart_data = fetch_chart_data(chain_slug, contract_address, end_timestamp, days_since_start)
+        for i in range(len(blocks)):
+            block_timestamp = blocks.iloc[i]['timestamp']
+            block_identifier = blocks.iloc[i][row['chain_name_y']]
 
-        with lock:
-            data['coins'][f"{chain_slug}:{contract_address}"] = chart_data['coins'][f"{chain_slug}:{contract_address}"]
+            # if None or block_identifier < row['start_block'] or Nan
+            if block_identifier is None or block_identifier < row['start_block'] or pd.isnull(block_identifier):
+                continue
 
-    except Exception:
-        logger.error(f"Cannot find price data for {token_info}")
-        logger.error(traceback.format_exc())
+            try :
+                formula = evaluate_formula(row['formula'],row['abi'],None,block_identifier,block_timestamp,current)
+            except Exception as e:
+                formula = 0
+                logger.info(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
+            try :
+                formula_available = evaluate_formula(row['formula_available'],row['abi'],None,block_identifier,block_timestamp,current)
+            except Exception as e:
+                formula_available = 0
+                logger.info(f"Error in evaluating formula : {e} : {traceback.format_exc()}")
+            
+            temp_data = {
+                    'timestamp':block_timestamp,
+                    'block_number':block_identifier,
+                    'account_id':row['account_id'],
+                    'chain_id':row['chain_id'],
+                    'chain_name_x':row['chain_name_x'],
+                    'contract_address':row['contract_address'],
+                    'protocol':row['protocol'],
+                    'contract_name':row['contract_name'],
+                    'account_type':row['account_type'],
+                    'fed_type':row['fed_type'],
+                    'formula':formula,
+                    'formula_available':formula_available
+                }
 
-def fetch_current_prices_from_tokens(token_address_list):
-    tokens = ','.join([f"{info['chain_slug']}:{info['contract_address']}" for info in token_address_list])
-    url = f"https://coins.llama.fi/prices/current/{tokens}?searchWidth=4h"
-    return fetch_json(url)
+            with lock:
+                data.append(temp_data)
+                
+        logger.info(f"Processed row {row['contract_name']} in {datetime.now() - contract_start_time}")
 
-def fetch_current_data(token_info, data):
-    try:
-        current_prices_data = fetch_current_prices_from_tokens(token_info)
-        for key, value in current_prices_data['coins'].items():
-            chain_slug, contract_address = key.split(':')
-            coin_data = {
-                'prices': [[int(value['timestamp']), value['price']]],
-                'confidence': value.get('confidence', None),
-                'symbol': value.get('symbol', None),
-                'decimals': value.get('decimals', None)
-            }
-            data['coins'][f"{chain_slug}:{contract_address}"] = coin_data
-    except Exception:
-        logger.error(traceback.format_exc())
+    except Exception as e:
+        logger.error(f"Error in processing row : {e} : {traceback.format_exc()} results : {formula} / {formula_available}")
+        pass
 
-def process_dataframe(data,current=True):
-    df = pd.DataFrame(data)
-    df.reset_index(level=0, inplace=True)
-    df.rename(columns={"index": "chain:token_address"}, inplace=True)
-    df[['chain', 'token_address']] = df['chain:token_address'].str.split(':', expand=True)
-    df = pd.concat([df.drop(['coins', 'chain:token_address'], axis=1), df['coins'].apply(pd.Series)], axis=1)
-    df = df.explode('prices')
-    df = pd.concat([df.drop(['prices'], axis=1), df['prices'].apply(pd.Series)], axis=1)
-    df.rename(columns={0: "timestamp", 1: "price"}, inplace=True)
-
-    if current:
-        # current unix timestamp
-        df['timestamp'] = pd.to_datetime(datetime.now())
-    else:
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-        df['timestamp'] = df['timestamp'].apply(lambda x: x + timedelta(days=1) if x.time() >= pd.Timestamp('12:00:00').time() else x)
-    
-    df['timestamp'] = df['timestamp'].dt.normalize()
-
-    # convert timetime to int64 and divide by 10^9 to get unix timestamp
-    df['timestamp'] = df['timestamp'].astype('int64') // 10**9
-    
-    df['chain_id'] = df['chain'].map(CHAIN_ID_MAP)
-    df['last_updated'] = datetime.now()
-    validate_keys(df)
-    return df
-
-def create_history(db_url, table_name):
+def create_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        token_address_list = fetch_json(PRICE_METHODOLOGY)["query_result"]["data"]["rows"]
-        data = {"coins": {}}
+        full_methodology = build_methodology_table(SUPPLY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+        blocks = get_table(PRODUCTION_DATABASE, 'blocks_daily')
+
+        current = False        
+        data = []
+        row_list = []
+
+        for i in range(len(full_methodology)):
+            row = full_methodology.iloc[i]
+            # subset blocks on date and row['chain_name_y']
+            blocks_row = blocks[['timestamp',row['chain_name_y']]]
+            row_list.append((row, blocks_row, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-            for token_info in token_address_list:
-                executor.submit(fetch_and_update_data, token_info, data)
-                logger.info(f"Finished fetching data for {token_info}")
+            for row_data in row_list:
+                executor.submit(process_row, *row_data)
 
-        df = process_dataframe(data, current=False)
+        data = pd.DataFrame(data)
 
-        save_table(db_url, table_name, df)
-        remove_duplicates(db_url, table_name, ['timestamp', 'chain_id', 'token_address'], 'last_updated')
-
-        logger.info(f"Total time: {datetime.now() - start_time}")
-    except Exception:
-        logger.error(f"Error in creating historical price table : {traceback.format_exc()}")
-
-def create_current(db_url, table_name):
-    try:
-        start_time = datetime.now()
-        token_address_list = fetch_json(PRICE_METHODOLOGY)["query_result"]["data"]["rows"]
-        data = {"coins": {}}
-        fetch_current_data(token_address_list, data)
-
-        df = process_dataframe(data, current=True)
+        validate_keys(data)
 
         if table_exists(db_url, table_name):
             drop_table(db_url, table_name)
-        save_table(db_url, table_name, df)
-        logger.info(f"Total time: {datetime.now() - start_time}")
-    except Exception:
-        logger.error(f"Error in creating current price table : {traceback.format_exc()}")
+        save_table(db_url,table_name,data)
 
-def update_history(db_url, table_name):
+        logger.info(f"Total execution time: {datetime.now() - start_time}")
+        
+    except Exception as e:
+        logger.error(traceback.format_exc())
+        logger.error(f"Total execution time: {datetime.now() - start_time}")
+
+def update_history(db_url,table_name):
     try:
         start_time = datetime.now()
-        token_address_list = fetch_json(PRICE_METHODOLOGY)["query_result"]["data"]["rows"]
-        data = {"coins": {}}
+        full_methodology = build_methodology_table(SUPPLY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+
+        current = False
+        current_data = get_table(db_url,table_name)
+
+        # get latest timestamp and block_number for each contract in the db
+        latest_blocks = current_data.groupby(['contract_address']).agg({'timestamp': 'max', 'block_number': 'max'}).reset_index()
+
+        blocks = get_table(PRODUCTION_DATABASE, 'blocks_daily')
+        
+        data = []
+        row_list = []
+
+        for i in range(len(full_methodology)):
+            row = full_methodology.iloc[i]
+            blocks_to_read = blocks[['timestamp', row['chain_name_y']]]
+
+            if row['contract_address'] in current_data['contract_address'].values:
+                row_latest_block = latest_blocks[latest_blocks['contract_address'] == row['contract_address']]['block_number'].iloc[0]
+                row_latest_timestamp = latest_blocks[latest_blocks['contract_address'] == row['contract_address']]['timestamp'].iloc[0]
+                today_timestamp = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+                blocks_to_read = blocks_to_read[blocks_to_read[row['chain_name_y']] > row_latest_block]
+
+                if blocks_to_read.empty:
+                    if row_latest_timestamp < today_timestamp:
+                        logger.error('It seems blocks daily table is out of sync, please update it before proceeding.')
+                        return
+                    elif row_latest_timestamp == today_timestamp:
+                        logger.warning(f"Skipping row {row['contract_name']} because it was already updated.")
+                        continue
+            
+                logger.warning(f"Updating Row {row['contract_name']} latest timestamp: {row_latest_timestamp}, today timestamp: {today_timestamp}, blocks to scan: {blocks_to_read}")
+
+            else:
+                logger.warning(f"Row {row['contract_name']} was not found in the current data, updating from scratch.")
+
+            row_list.append((row, blocks_to_read, data,current))
 
         with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-            for token_info in token_address_list:
-                executor.submit(fetch_and_update_data, token_info, data)
-                logger.info(f"Finished fetching data for {token_info}")
+            for row_data in row_list:
+                executor.submit(process_row, *row_data)
 
-        df = process_dataframe(data, current=False)
+        data = pd.DataFrame(data)
 
-        save_table(db_url, table_name, df)
-        remove_duplicates(db_url, table_name, ['timestamp', 'chain_id', 'token_address'], 'last_updated')
-        logger.info(f"Total time: {datetime.now() - start_time}")
-    except Exception:
-        logger.error(f"Error in updating historical price table : {traceback.format_exc()}")
+        validate_keys(data)
+        update_table(db_url,table_name,data)
+
+        logger.info(f"Total execution time: {datetime.now() - start_time}")
+        
+    except Exception as e:
+        logger.error(traceback.format_exc())
+        logger.error(row)
+
+def create_current(db_url,table_name):
+    # save as above but only for the last_block_number
+    try:
+        start_time = datetime.now()
+        full_methodology = build_methodology_table(SUPPLY_METHODOLOGY_URL,WEB3_PROVIDERS_URL)
+
+        blocks = get_table(PRODUCTION_DATABASE, 'blocks_current')
+        
+        current = True
+        data = []
+        row_list = []
+
+        for i in range(len(full_methodology)):
+            row = full_methodology.iloc[i]
+            
+            blocks_row = blocks[blocks['chain_name'] == row['chain_name_y']]
+            #reshape with timestamp: date and chain_name_y: block_number
+            blocks_row = blocks_row.rename(columns={'block_number': row['chain_name_y']})
+            #blocks_row = blocks_row.drop_duplicates(subset=['timestamp', row['chain_name_x']], keep='last')
+            
+            # Update blocks_row so we can access bloxks_row['timestamp'] and blocks_row[row['chain_name_y']]
+            blocks_row = blocks_row.set_index('timestamp')
+            blocks_row = blocks_row[[row['chain_name_y']]]
+            blocks_row = blocks_row.reset_index()
+            blocks_row['timestamp'] = start_time.timestamp()
+            blocks_row['timestamp'] = blocks_row['timestamp'].astype(int)
+
+            row_list.append((row, blocks_row, data,current))
+
+        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+            for row_data in row_list:
+                executor.submit(process_row, *row_data)
+
+        data = pd.DataFrame(data)
+
+        data['timestamp'] = data['timestamp'].astype('Int64')
+
+        validate_keys(data)
+
+        if table_exists(db_url, table_name):
+            drop_table(db_url, table_name)
+
+        save_table(db_url,table_name,data)
+
+        logger.info(f"Total execution time: {datetime.now() - start_time}")
+        
+    except Exception as e:
+        logger.error(traceback.format_exc())
